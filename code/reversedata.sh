@@ -1,0 +1,1 @@
+files=daily_2012-09-27; ls $files | while read line; do 	count=`cat $files/$line | wc -l`; 	line1=`cat $files/$line | head -n 1`; 	newfile=`mktemp blah.XXXXXX`; 	echo "$line1" > $newfile;	cat $files/$line | tail -n $(($count - 1)) | sort -r >> $newfile;	mv $newfile $files/$line ; echo $line; done

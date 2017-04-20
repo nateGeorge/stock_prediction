@@ -21,8 +21,8 @@
 # https://code.google.com/p/yahoo-finance-managed/wiki/csvQuotesDownload
 # https://code.google.com/p/yahoo-finance-managed/wiki/csvHistQuotesDownload
 
-historial_base_url="http://ichart.yahoo.com/table.csv?"
-quote_base_url="http://download.finance.yahoo.com/d/quotes.csv?"
+historial_base_url="https://ichart.yahoo.com/table.csv?"
+quote_base_url="https://download.finance.yahoo.com/d/quotes.csv?"
 
 stocklist="../stockdata/stocks.txt"
 
@@ -75,7 +75,8 @@ function get_historic_values_all_stocks()
 			# download all of the available data for the stock in 1 foul swoop
 			# example: http://ichart.yahoo.com/table.csv?s=IBM&a=0&b=0&c=0&d=12&e=31&f=2012&g=w
 			echo -ne "downloading $stock...\r";
-			curl -s "${historial_base_url}s=${stock}&a=0&b=0&c=0&d=${monthnum}&e=${day}&f=${year}" > "$directory/$stock.csv"
+			curl -s -o "$directory/$stock.csv" "${historial_base_url}s=${stock}&a=0&b=0&c=0&d=${monthnum}&e=${day}&f=${year}"
+			#echo "${historial_base_url}s=${stock}&a=0&b=0&c=0&d=${monthnum}&e=${day}&f=${year}"
 			# Now let's fix the data so it's in our format: Sort the data so the latest value is at the bottom
 			# versus the top.
 			topline=`head -n 1 "$directory/$stock.csv"`

@@ -24,7 +24,13 @@
 historial_base_url="http://ichart.yahoo.com/table.csv?"
 quote_base_url="http://download.finance.yahoo.com/d/quotes.csv?"
 
-stocklist="stocks.txt"
+stocklist="../stockdata/stocks.txt"
+
+read weekday month day hms tz year <<< `date`
+# could also do like this
+# weekday = now | cut -c1-4
+monthnum=`date -d "$month 1" "+%m"`
+
 
 
 function query_yahoo()
@@ -56,7 +62,7 @@ function get_historial_data()
 
 function get_historic_values_all_stocks()
 {
-	directory="daily_"`date +%F`
+	directory="../stockdata/daily_"`date +%F`
 	if [ ! -d "$directory" ]; then
 		echo 'making directory';
 		mkdir $directory;
@@ -69,7 +75,7 @@ function get_historic_values_all_stocks()
 			# download all of the available data for the stock in 1 foul swoop
 			# example: http://ichart.yahoo.com/table.csv?s=IBM&a=0&b=0&c=0&d=12&e=31&f=2012&g=w
 			echo -ne "downloading $stock...\r";
-			curl -s "${historial_base_url}s=${stock}&a=0&b=0&c=0&d=12&e=31&f=2012" > "$directory/$stock.csv"
+			curl -s "${historial_base_url}s=${stock}&a=0&b=0&c=0&d=${monthnum}&e=${day}&f=${year}" > "$directory/$stock.csv"
 			# Now let's fix the data so it's in our format: Sort the data so the latest value is at the bottom
 			# versus the top.
 			topline=`head -n 1 "$directory/$stock.csv"`
@@ -85,7 +91,7 @@ function get_historic_values_all_stocks()
 
 function get_current_values_all_stocks()
 {
-	directory="current_"`date +%F`"-"`date +%H`
+	directory="../stockdata/current_"`date +%F`"-"`date +%H`
 	if [ ! -d "$directory" ]; then
 		echo 'making directory';
 		mkdir $directory;
@@ -114,7 +120,7 @@ function get_current_values_all_stocks()
 
 function get_current_values_all_stocks_batch()
 {
-	directory="current_"`date +%F`"-"`date +%H`
+	directory="../stockdata/current_"`date +%F`"-"`date +%H`
 	if [ ! -d "$directory" ]; then
 		echo 'making directory';
 		mkdir $directory;
@@ -151,7 +157,7 @@ function get_historic_values_append()
 		tempfile=`mktemp tempnewdata.XXXXXXX`
 		# grab the data from that date on
 		# example: http://ichart.yahoo.com/table.csv?s=IBM&a=0&b=0&c=0&d=12&e=31&f=2012&g=w
-		curl -s "${historial_base_url}s=${stock}&a=$lastmonth&b=$lastday&c=$lastyear&d=12&e=31&f=2021" > "$tempfile"
+		curl -s "${historial_base_url}s=${stock}&a=$lastmonth&b=$lastday&c=$lastyear&d=${monthnum}&e=${day}&f=${year}" > "$tempfile"
 			#append data lines of new data in reverse order to stock data file
 			tail -n $(($(`cat $tempfile | wc -l`) - 1)) $tempfile >> $stock_file
 			rm $tempfile;

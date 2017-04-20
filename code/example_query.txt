@@ -1,0 +1,1 @@
+curl -o test.csv https://ichart.yahoo.com/table.csv?s=ACTS&a=0&b=0&c=0&d=04&e=19&f=2017

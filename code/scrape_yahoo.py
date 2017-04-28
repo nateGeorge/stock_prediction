@@ -61,12 +61,26 @@ def normalize_prices(df):
     """
     new_df = df.copy()
     price_cols = ['Open', 'Close', 'High', 'Low']
-    last_ratio = df.iloc[-1]['Close'] / df.iloc[-1]['Adj Close']
+    # .iloc[0] is the latest date
+    last_ratio = df.iloc[0]['Close'] / df.iloc[0]['Adj Close']
     ratio = df['Adj Close'] / df['Close']
     for p in price_cols:
         new_df[p] = df[p] * ratio * last_ratio
 
     return new_df
+
+def create_new_features(df):
+    """
+    Creates features for price differences:
+    high-low
+    close-open
+    """
+    df['close-open'] = df['Close'] - df['Open']
+    df['high-low'] = df['High'] - df['Low']
+    df['close-open_pct'] = df['close-open'] / df['Adj Close'] * 100
+    df['high-low_pct'] = df['high-low'] / df['Adj Close'] * 100
+
+    return df
 
 
 if __name__ == "__main__":

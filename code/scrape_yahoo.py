@@ -27,7 +27,7 @@ def download_stocks(stocklist=STOCKLIST):
         print(scrape_url)
         res = req.get(scrape_url)
         if not res.ok:
-            print('problem! :' + res.status_code)
+            print('problem! : ' + str(res.status_code))
             continue
 
         test = res.content.strip(b'\n').split(b'\n')

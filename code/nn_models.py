@@ -100,7 +100,7 @@ def plot_data_preds_scaled(model, stock, dfs, scaled_ts, scaled_fs, train_test='
                 'color': 'rgb(255, 0, 0)',
                 'width': 2,
             },
-            'fillcolor': 'rgba(128, 0, 128, 0.3)',
+            'fillcolor': 'rgba(128, 0, 128, 0.05)',
         }]}
         trace0 = go.Scatter(
             x = dfs[stock].index,

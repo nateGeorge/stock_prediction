@@ -72,7 +72,7 @@ def fit_model_silent(model, X_train, train_t):
     history = History()
     model.fit(X_train,
                 train_t,
-                epochs=10,
+                epochs=1000,
                 batch_size=500,
                 verbose=0,
                 callbacks=[history])

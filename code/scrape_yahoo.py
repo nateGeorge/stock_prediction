@@ -2,6 +2,7 @@ import datetime
 from pytz import timezone
 import requests as req
 import pandas as pd
+import numpy as np
 from collections import OrderedDict
 
 MTN = timezone('America/Denver')
@@ -62,12 +63,16 @@ def normalize_prices(df):
     new_df = df.copy()
     price_cols = ['Open', 'Close', 'High', 'Low']
     # .iloc[0] is the latest date
-    last_ratio = df.iloc[0]['Close'] / df.iloc[0]['Adj Close']
+    # usually this should be 1
+    last_ratio = df.iloc[0]['Adj Close'] / df.iloc[0]['Close']
+    # this is what will really normalize the data.  The adjusted close is
+    # what the value would be if things were equalized for the latest data
     ratio = df['Adj Close'] / df['Close']
     for p in price_cols:
         new_df[p] = df[p] * ratio * last_ratio
 
     return new_df
+
 
 def create_new_features(df):
     """
@@ -81,6 +86,42 @@ def create_new_features(df):
     df['high-low_pct'] = df['high-low'] / df['Adj Close'] * 100
 
     return df
+
+
+def load_norm_crt_feat(stocks=['NUGT', 'DUST', 'GLD']):
+    """
+    Loads data, creates new features, and normalizes prices for splits.
+    """
+    dfs = load_stocks(stocks=stocks)
+    for s in stocks:
+        dfs[s] = create_new_features(dfs[s])
+        dfs[s] = normalize_prices(dfs[s])
+
+    return dfs
+
+
+def create_hist_feats(dfs, history_days=30, future_days=5):
+    """
+    Creates features from historical data.
+    :param history_days number of days to use for prediction:
+    :param future_days days out in the future we want to predict for
+    """
+    feats = {}
+    targs = {}
+    for s in dfs.keys():
+        data_points = dfs[s].shape[0]
+        dfs[s] = dfs[s].iloc[::-1]  # reverses dataframe
+        # create time-lagged features
+        features = []
+        targets = []
+        for i in range(history_days, data_points - future_days):
+            features.append(dfs[s].iloc[i - history_days:i][['Open', 'High', 'Low', 'Close', 'Volume']].values.ravel())
+            targets.append(dfs[s].iloc[i + future_days]['Close'])
+
+        feats[s] = np.array(features)
+        targs[s] = np.array(targets)
+
+    return feats, targs
 
 
 if __name__ == "__main__":

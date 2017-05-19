@@ -1,7 +1,12 @@
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation
-from keras.layers import LSTM
-import keras
+from keras.layers import Dense, Dropout, Activation, LSTM, Flatten
+from keras.layers.core import Reshape
+from keras.layers.wrappers import TimeDistributed
+from keras.layers.convolutional import Conv1D
+from keras.layers.pooling import MaxPooling1D
+from keras.optimizers import RMSprop
+from keras import regularizers
+from keras.layers.normalization import BatchNormalization
 from keras.callbacks import History
 import numpy as np
 from keras.layers.advanced_activations import LeakyReLU
@@ -10,6 +15,10 @@ import plotly
 plotly.offline.init_notebook_mode()
 from plotly.offline import download_plotlyjs, init_notebook_mode, plot, iplot
 import plotly.graph_objs as go
+
+# hyperparameters
+EPOCHS = 200
+BATCH = 100
 
 
 def create_nn_data(train_fs, test_fs):
@@ -25,7 +34,25 @@ def create_nn_data(train_fs, test_fs):
     return X_trains, X_tests
 
 
-def create_model(X_train):
+def create_nn_data4conv1d(train_fs, test_fs):
+    # NOTE: to use keras's RNN LSTM module our input must be reshaped to [samples, stepsize, window size]
+    # our stepsize is 1 because we increment the time by 1 for each sample
+    # window size is 30 currently
+    X_trains = {}
+    X_tests = {}
+    for s in train_fs.keys():
+        X_trains[s] = np.asarray(np.reshape(train_fs[s], (train_fs[s].shape[0], train_fs[s].shape[1], 1)))
+        X_tests[s] = np.asarray(np.reshape(test_fs[s], (test_fs[s].shape[0], test_fs[s].shape[1], 1)))
+
+    return X_trains, X_tests
+
+
+
+def create_model_1(X_train):
+    """
+    Found that this is overfitting because the test data (val) loss
+    goes down and then way up.
+    """
     leaky_relu = LeakyReLU()
 
     model = Sequential()
@@ -38,7 +65,7 @@ def create_model(X_train):
     model.add(Dense(1))
 
     # build model using keras documentation recommended optimizer initialization
-    optimizer = keras.optimizers.RMSprop(lr=0.001, rho=0.9, epsilon=1e-08, decay=0.0)
+    optimizer = RMSprop(lr=0.001, rho=0.9, epsilon=1e-08, decay=0.0)
 
     # compile the model
     model.compile(loss='mean_squared_error', optimizer=optimizer)
@@ -46,36 +73,118 @@ def create_model(X_train):
     return model
 
 
-def fit_model_nb(model, X_train, train_t):
+def create_model(X_train):
+    """
+
+    """
+    leaky_relu = LeakyReLU()
+
+    model = Sequential()
+    model.add(LSTM(256,
+                    input_shape=X_train.shape[1:],
+                    activation=None,
+                    kernel_regularizer=regularizers.l2(0.01),
+                    bias_regularizer=regularizers.l2(0.01),
+                    return_sequences=True))
+    model.add(leaky_relu)
+    # model.add(Dropout(0.5))
+    model.add(LSTM(256,
+                    activation=None,
+                    kernel_regularizer=regularizers.l2(0.01),
+                    bias_regularizer=regularizers.l2(0.01)))
+    model.add(leaky_relu)
+    model.add(Dense(256))
+    model.add(Dropout(0.5))
+    model.add(Reshape((-1, 1)))
+    model.add(Conv1D(64,
+                    15,
+                    strides=1,
+                    padding='valid',
+                    activation=None))
+    # https://github.com/fchollet/keras/issues/4403 note on TimeDistributed
+    model.add(MaxPooling1D(pool_size=2,
+                            strides=2,
+                            padding='valid'))
+    model.add(Conv1D(128,
+                    15,
+                    strides=1,
+                    padding='valid',
+                    activation=None))
+    # https://github.com/fchollet/keras/issues/4403 note on TimeDistributed
+    model.add(MaxPooling1D(pool_size=2,
+                            strides=2,
+                            padding='valid'))
+    model.add(Flatten())
+    model.add(Dense(64))
+    # model.add(Dropout(0.5))
+    model.add(Dense(1))
+
+    # build model using keras documentation recommended optimizer initialization
+    optimizer = RMSprop(lr=0.001, rho=0.9, epsilon=1e-08, decay=0.0)
+
+    # compile the model
+    model.compile(loss='mean_squared_error', optimizer=optimizer)
+
+    return model
+
+
+def fit_model_nb(model, X_train, train_t, X_test, test_t):
     # for fitting the model in a jupyter notebook
     history = History()
     model.fit(X_train,
                 train_t,
-                epochs=1000,
-                batch_size=500,
+                epochs=EPOCHS,
+                batch_size=BATCH,
+                validation_data=[X_test, test_t],
                 verbose=0,
                 callbacks=[TQDMNotebookCallback(), history])
 
     return history
 
-def fit_model(model, X_train, train_t):
+
+def fit_model(model, X_train, train_t, X_test, test_t):
     history = History()
     model.fit(X_train,
                 train_t,
-                epochs=1000,
-                batch_size=500,
+                epochs=EPOCHS,
+                batch_size=BATCH,
+                validation_data=[X_test, test_t],
                 verbose=1,
                 callbacks=[history])
 
+    return history
 
-def fit_model_silent(model, X_train, train_t):
+
+def fit_model_silent(model, X_train, train_t, X_test, test_t):
     history = History()
     model.fit(X_train,
                 train_t,
-                epochs=1000,
-                batch_size=500,
+                epochs=EPOCHS,
+                batch_size=BATCH,
+                validation_data=[X_test, test_t],
                 verbose=0,
                 callbacks=[history])
+
+    return history
+
+
+def plot_losses(history):
+    """
+    Plots train and val losses from neural net training.
+    """
+    trace0 = go.Scatter(
+        x = history.epoch,
+        y = history.history['loss'],
+        mode = 'lines+markers',
+        name = 'loss'
+    )
+    trace1 = go.Scatter(
+        x = history.epoch,
+        y = history.history['val_loss'],
+        mode = 'lines+markers',
+        name = 'test loss'
+    )
+    f = iplot({'data':[trace0, trace1]})
 
 
 def plot_data_preds_scaled(model, stock, dfs, scaled_ts, scaled_fs, train_test='all', train_frac=0.85):
@@ -165,15 +274,16 @@ def plot_data_preds_unscaled(model, stock, dfs, t_scalers, scaled_fs, targs):
     preds = model.predict(for_preds).ravel()
     unscaled_preds = t_scalers[stock].reform_data(preds, orig=True)
 
+    datapoints = 300
     trace0 = go.Scatter(
-        x = dfs[stock].index,
-        y = targs[stock],
+        x = dfs[stock].index[-datapoints:],
+        y = targs[stock][-datapoints:],
         mode = 'lines+markers',
         name = 'actual'
     )
     trace1 = go.Scatter(
-        x = dfs[stock].index,
-        y = unscaled_preds.ravel(),
+        x = dfs[stock].index[-datapoints:],
+        y = unscaled_preds.ravel()[-datapoints:],
         mode = 'lines+markers',
         name = 'predictions'
     )

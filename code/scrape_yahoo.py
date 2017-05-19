@@ -17,7 +17,15 @@ QUOTE_BASE_URL = "https://download.finance.yahoo.com/d/quotes.csv?"
 
 STOCKLIST = "../stockdata/goldstocks.txt"
 
+# this should be another way to get quotes but I think it's only real time
+# BASE_URL = 'https://query.yahooapis.com/v1/public/yql?q='
+# SELECT_URL = 'select%20*%20from%20yahoo.finance.quotes%20where%20symbol%20in%20(%22'
+# YHOO%22)&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys&callback=
+
 def download_stocks(stocklist=STOCKLIST):
+    """
+    Yahoo shut this down around 5-15-2017.
+    """
     # load stocklist
     with open(stocklist) as f:
         stocks = f.read().strip('\n').split('\n')
@@ -55,6 +63,8 @@ def load_stocks(stocks=['GLD', 'DUST', 'NUGT']):
 
 def normalize_prices(df):
     """
+    This was only necessary with yahoo.  Now it's worthless.
+
     Currently, this normalizes the prices to the current actual price.  The
     'adjusted close' is the close adjusted for all splits, so it would
     be the close adjusted to match what it would be if there were no splits.

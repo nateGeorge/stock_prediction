@@ -68,8 +68,9 @@ class data_scaler(object):
 
     def reform_data(self, data, datasetnum=None, orig=False):
         """
-        Re-constructs original data from the transformed data.  Requires the dataset number or to specify
-        that
+        Re-constructs original data from the transformed data.
+        Requires the dataset number or to specify
+        that its the original data
         """
         if orig is True and datasetnum is not None:
             print('error! must only supply original or supplimentary dataset')

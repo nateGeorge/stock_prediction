@@ -30,6 +30,7 @@ def create_hist_feats(dfs, history_days=30, future_days=5):
         # create time-lagged features
         features = []
         targets = []
+        dates = []
         for i in range(history_days, data_points - future_days):
             features.append(dfs[s].iloc[i - history_days:i][['Adj_Open', 'Adj_High', 'Adj_Low', 'Adj_Close', 'Adj_Volume']].values.ravel())
             targets.append(dfs[s].iloc[i + future_days]['Adj_Close'])

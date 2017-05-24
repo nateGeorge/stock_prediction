@@ -48,7 +48,7 @@ class data_scaler(object):
         scaled = self.scaler.fit_transform(mva_scaled.values.reshape(-1, 1))
         return scaled.ravel()
 
-    def transform_more_data(self, data, mva=20):
+    def transform_more_data(self, data, mva=30):
         """
         Takes a numpy array (data) a standardscaler, and moving average data set as input,
         divides by the moving average and uses the scaler to scale it,
@@ -84,6 +84,7 @@ class data_scaler(object):
         return unrolled
 
 
+# are these supposed to be in the class?
 def scale_datasets(feats, targs):
     """
     Takes two dicts with keys as stock tickers (strings) and values as numpy
@@ -113,6 +114,27 @@ def scale_datasets(feats, targs):
         scaled_fs[s] = scaled_data
 
     return t_scalers, scaled_ts, f_scalers, scaled_fs
+
+
+def scale_one_dataset(feats, targs):
+    """
+    Takes two dicts with keys as stock tickers (strings) and values as numpy
+    arrays, and returns dicts with scaled targets and features.
+    """
+    t_ds = data_scaler(mva=30)
+    scaled_targets = t_ds.transform_data(data=targs)
+    # scale and save features
+    scalers = []
+    scaled_data = []
+    for i in range(feats[s].shape[1]):
+        ds = data_scaler()
+        scalers.append(ds)
+        scaled_data.append(ds.transform_data(data=feats[:, i]))
+
+    scaled_data = np.array(scaled_data).T
+
+    return t_ds, scaled_targets, scalers, scaled_data
+
 
 def train_test_split_datasets(t_scalers, scaled_t, f_scalers, scaled_f, train_frac=0.85):
     train_fs = {}

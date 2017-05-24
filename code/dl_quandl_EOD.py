@@ -13,7 +13,7 @@ Q_KEY = os.environ.get('quandl_api')
 STOCKLIST = "../stockdata/goldstocks.txt"
 
 
-def download_stocks(stocklist=STOCKLIST):
+def download_stocks(stocklist=STOCKLIST, fresh=False):
     """
     Downloads stock data and returns dict of pandas dataframes.
     First checks if data is up to date, if so, just loads the data.
@@ -27,6 +27,13 @@ def download_stocks(stocklist=STOCKLIST):
     for s in stocks:
         print(s)
         stockfile = '../stockdata/' + s + '.csv.gz'
+        if fresh:
+            print('downloading fresh')
+            stock = quandl.get('EOD/' + s)
+            stock.to_csv(stockfile, compression='gzip')
+            dfs[s] = stock
+            continue
+
         if os.path.exists(stockfile):
             stock = pd.read_csv(stockfile, index_col=0)
             stock.index = pd.to_datetime(stock.index)
@@ -44,10 +51,9 @@ def download_stocks(stocklist=STOCKLIST):
                 print('latest date is')
                 print(stock.iloc[-2:].index[-1].date())
                 print('downloading fresh')
-
-        stock = quandl.get('EOD/' + s)
-        stock.to_csv(stockfile, compression='gzip')
-        dfs[s] = stock
+                stock = quandl.get('EOD/' + s)
+                stock.to_csv(stockfile, compression='gzip')
+                dfs[s] = stock
 
     return dfs
 

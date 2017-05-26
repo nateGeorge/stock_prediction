@@ -8,6 +8,7 @@ from pytz import timezone
 MTN = timezone('America/Denver')
 TODAY = datetime.datetime.now(MTN)
 WEEKDAY = TODAY.weekday()
+HOUR = TODAY.hour
 
 Q_KEY = os.environ.get('quandl_api')
 STOCKLIST = "../stockdata/goldstocks.txt"
@@ -38,7 +39,9 @@ def download_stocks(stocklist=STOCKLIST, fresh=False):
             stock = pd.read_csv(stockfile, index_col=0)
             stock.index = pd.to_datetime(stock.index)
             timedelta_step = 1
-            if WEEKDAY == 0:  # it's monday
+            if HOUR > 2:
+                timedelta_step = 0
+            elif WEEKDAY == 0:  # it's monday
                 timedelta_step = 3  # can be up to last friday
             if (TODAY.date() - stock.iloc[-2:].index[-1].date()) <= datetime.timedelta(timedelta_step):
                 dfs[s] = stock

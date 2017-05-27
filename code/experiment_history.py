@@ -460,3 +460,40 @@ def create_conv1d_model(X_train):
     model.compile(loss='mean_squared_error', optimizer=optimizer)
 
     return model
+
+
+def embed_model(X_train):
+    """
+    does pretty well just not on validation data.  0.14 loss
+    fits extremely fast (10s compared with 90+s for other models)
+    """
+    model = Sequential()
+
+    max_features = math.ceil(X_train.ravel().max())
+    print('max_features for embed layer: ', max_features)
+    embedding_dims = 50
+
+    model.add(Embedding(max_features, embedding_dims, input_length=X_train.shape[1], embeddings_regularizer=l2(1e-8)))
+    model.add(Dropout(0.2))
+
+    model.add(Conv1D(32, 3, padding='valid', activation='relu', strides=1))
+    model.add(BatchNormalization())
+    model.add(leaky_relu)
+    model.add(MaxPooling1D(pool_size=2,
+                            strides=2,
+                            padding='valid'))
+    model.add(Conv1D(64, 3, padding='valid', activation='relu', strides=1))
+    model.add(BatchNormalization())
+    model.add(leaky_relu)
+    model.add(GlobalMaxPooling1D())
+
+    model.add(Dense(100))
+    model.add(Dropout(0.2))
+    model.add(BatchNormalization())
+    model.add(leaky_relu)
+
+    model.add(Dense(1))
+
+    model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
+    print('Complete.')
+    return model

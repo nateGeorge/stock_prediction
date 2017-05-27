@@ -1,5 +1,6 @@
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, LSTM, Flatten
+from keras.layers import Dense, Dropout, Activation, LSTM, Flatten, Embedding, GlobalMaxPooling1D
+from keras.regularizers import l2
 from keras.layers.core import Reshape
 from keras.layers.wrappers import TimeDistributed
 from keras.layers.convolutional import Conv1D
@@ -7,7 +8,6 @@ from keras.layers.pooling import MaxPooling1D
 from keras.initializers import glorot_normal
 from keras.layers.pooling import GlobalAveragePooling1D
 from keras.optimizers import RMSprop
-from keras import regularizers
 from keras.layers.normalization import BatchNormalization
 from keras.callbacks import History
 import numpy as np
@@ -17,6 +17,7 @@ import plotly
 plotly.offline.init_notebook_mode()
 from plotly.offline import download_plotlyjs, init_notebook_mode, plot, iplot
 import plotly.graph_objs as go
+import math
 
 # hyperparameters
 EPOCHS = 200
@@ -84,16 +85,16 @@ def create_model_complex(X_train):
                     input_shape=X_train.shape[1:],
                     activation=None,
                     kernel_initializer='glorot_normal',
-                    kernel_regularizer=regularizers.l2(0.01),
-                    bias_regularizer=regularizers.l2(0.01),
+                    kernel_regularizer=l2(0.01),
+                    bias_regularizer=l2(0.01),
                     return_sequences=True))
     model.add(leaky_relu)
     # model.add(Dropout(0.5))
     model.add(LSTM(256,
                     activation=None,
                     kernel_initializer='glorot_normal',
-                    kernel_regularizer=regularizers.l2(0.01),
-                    bias_regularizer=regularizers.l2(0.01)))
+                    kernel_regularizer=l2(0.01),
+                    bias_regularizer=l2(0.01)))
     model.add(leaky_relu)
     model.add(Dense(256, kernel_initializer='glorot_normal'))
     model.add(BatchNormalization())
@@ -157,15 +158,15 @@ def create_model(X_train):
     model.add(LSTM(256,
                     input_shape=X_train.shape[1:],
                     activation=None,
-                    kernel_regularizer=regularizers.l2(0.01),
-                    bias_regularizer=regularizers.l2(0.01),
+                    kernel_regularizer=l2(0.01),
+                    bias_regularizer=l2(0.01),
                     return_sequences=True))
     model.add(leaky_relu)
     # model.add(Dropout(0.5))
     model.add(LSTM(256,
                     activation=None,
-                    kernel_regularizer=regularizers.l2(0.01),
-                    bias_regularizer=regularizers.l2(0.01)))
+                    kernel_regularizer=l2(0.01),
+                    bias_regularizer=l2(0.01)))
     model.add(leaky_relu)
     model.add(Dense(256))
     model.add(Dropout(0.5))
@@ -200,7 +201,7 @@ def create_model(X_train):
     model.compile(loss='mean_squared_error', optimizer=optimizer)
 
     return model
-    
+
 
 def create_conv1d_model(X_train):
     """
@@ -257,6 +258,93 @@ def create_conv1d_model(X_train):
     return model
 
 
+def create_model_lstm(X_train):
+    """
+
+    """
+    model = Sequential()
+    model.add(LSTM(256,
+                    input_shape=X_train.shape[1:],
+                    activation=None,
+                    kernel_regularizer=l2(0.01),
+                    bias_regularizer=l2(0.01),
+                    return_sequences=True))
+    model.add(leaky_relu)
+    # model.add(Dropout(0.5))
+    model.add(LSTM(256,
+                    activation=None,
+                    kernel_regularizer=l2(0.01),
+                    bias_regularizer=l2(0.01)))
+    model.add(leaky_relu)
+    model.add(Dense(256))
+    model.add(Dropout(0.5))
+    model.add(Reshape((-1, 1)))
+    model.add(Conv1D(64,
+                    15,
+                    strides=1,
+                    padding='valid',
+                    activation=None))
+    # https://github.com/fchollet/keras/issues/4403 note on TimeDistributed
+    model.add(MaxPooling1D(pool_size=2,
+                            strides=2,
+                            padding='valid'))
+    model.add(Conv1D(128,
+                    15,
+                    strides=1,
+                    padding='valid',
+                    activation=None))
+    # https://github.com/fchollet/keras/issues/4403 note on TimeDistributed
+    model.add(MaxPooling1D(pool_size=2,
+                            strides=2,
+                            padding='valid'))
+    model.add(Flatten())
+    model.add(Dense(64))
+    model.add(Dropout(0.5))
+    model.add(BatchNormalization())
+    model.add(Dense(1))
+
+    # compile the model
+    model.compile(optimizer='adam', loss='mean_squared_error')
+
+    return model
+
+
+def embed_model(X_train):
+    model = Sequential()
+
+    max_features = math.ceil(X_train.ravel().max())
+    print('max_features for embed layer: ', max_features)
+    embedding_dims = 50
+
+    model.add(Embedding(max_features,
+                        embedding_dims,
+                        input_length=X_train.shape[1],
+                        embeddings_regularizer=l2(1e-4)))
+    model.add(Dropout(0.2))
+
+    model.add(Conv1D(32, 3, padding='valid', activation='relu', strides=1))
+    model.add(BatchNormalization())
+    model.add(leaky_relu)
+    model.add(MaxPooling1D(pool_size=2,
+                            strides=2,
+                            padding='valid'))
+    model.add(Conv1D(64, 3, padding='valid', activation='relu', strides=1))
+    model.add(BatchNormalization())
+    model.add(leaky_relu)
+    model.add(GlobalMaxPooling1D())
+
+    model.add(Dense(100))
+    model.add(Dropout(0.2))
+    model.add(BatchNormalization())
+    model.add(leaky_relu)
+
+    model.add(Dense(1))
+
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    print('Complete.')
+    return model
+
+
 def fit_model_nb(model, X_train, train_t, X_test, test_t):
     # for fitting the model in a jupyter notebook
     history = History()
@@ -284,11 +372,11 @@ def fit_model(model, X_train, train_t, X_test, test_t):
     return history
 
 
-def fit_model_silent(model, X_train, train_t, X_test, test_t):
+def fit_model_silent(model, X_train, train_t, X_test, test_t, epochs=EPOCHS):
     history = History()
     model.fit(X_train,
                 train_t,
-                epochs=EPOCHS,
+                epochs=epochs,
                 batch_size=BATCH,
                 validation_data=[X_test, test_t],
                 verbose=0,
@@ -393,13 +481,32 @@ def plot_data_preds_scaled(model, stock, dfs, scaled_ts, scaled_fs, train_test='
         print('error!  You have to supply train_test as \'all\', \'train\', or \'test\'')
 
 
-def plot_data_preds_unscaled(model, stock, dfs, t_scalers, scaled_fs, targs):
+def plot_data_preds_unscaled(model, stock, dfs, t_scalers, scaled_ts, scaled_fs, targs, datapoints=300, train_frac=0.85):
+    train_size = int(train_frac * dfs[stock].shape[0])
+
     for_preds = scaled_fs[stock].reshape(scaled_fs[stock].shape[0],
                                         1, scaled_fs[stock].shape[1])
     preds = model.predict(for_preds).ravel()
     unscaled_preds = t_scalers[stock].reform_data(preds, orig=True)
 
-    datapoints = 300
+    if datapoints == 'all':
+        datapoints = dfs[stock].shape[0]
+
+    layout = {'shapes': [
+    {
+        'type': 'rect',
+        # stupid hack to deal with pandas issue
+        'x0': dfs[stock].iloc[train_size:train_size + 1].index[0].date().strftime('%Y-%m-%d'),
+        'y0': 1.1 * min([min(targs[stock][-datapoints:]), min(unscaled_preds.ravel()[-datapoints:])]),
+        'x1': dfs[stock].iloc[-2:-1].index[0].date().strftime('%Y-%m-%d'),
+        'y1': 1.1 * max([max(targs[stock][-datapoints:]), max(unscaled_preds.ravel()[-datapoints:])]),
+        'line': {
+            'color': 'rgb(255, 0, 0)',
+            'width': 2,
+        },
+        'fillcolor': 'rgba(128, 0, 128, 0.05)',
+    }]}
+
     trace0 = go.Scatter(
         x = dfs[stock].index[-datapoints:],
         y = targs[stock][-datapoints:],
@@ -412,7 +519,47 @@ def plot_data_preds_unscaled(model, stock, dfs, t_scalers, scaled_fs, targs):
         mode = 'lines+markers',
         name = 'predictions'
     )
-    f = iplot([trace0, trace1])
+    f = iplot({'data':[trace0, trace1], 'layout':layout})
+
+
+def plot_data_preds_unscaled_embed(model, stock, dfs, t_scalers, scaled_ts, scaled_fs, targs, datapoints=300, train_frac=0.85):
+    train_size = int(train_frac * dfs[stock].shape[0])
+
+    for_preds = scaled_fs[stock]
+    preds = model.predict(for_preds).ravel()
+    unscaled_preds = t_scalers[stock].reform_data(preds, orig=True)
+
+    if datapoints == 'all':
+        datapoints = dfs[stock].shape[0]
+
+    layout = {'shapes': [
+    {
+        'type': 'rect',
+        # stupid hack to deal with pandas issue
+        'x0': dfs[stock].iloc[train_size:train_size + 1].index[0].date().strftime('%Y-%m-%d'),
+        'y0': 1.1 * min([min(targs[stock][-datapoints:]), min(unscaled_preds.ravel()[-datapoints:])]),
+        'x1': dfs[stock].iloc[-2:-1].index[0].date().strftime('%Y-%m-%d'),
+        'y1': 1.1 * max([max(targs[stock][-datapoints:]), max(unscaled_preds.ravel()[-datapoints:])]),
+        'line': {
+            'color': 'rgb(255, 0, 0)',
+            'width': 2,
+        },
+        'fillcolor': 'rgba(128, 0, 128, 0.05)',
+    }]}
+
+    trace0 = go.Scatter(
+        x = dfs[stock].index[-datapoints:],
+        y = targs[stock][-datapoints:],
+        mode = 'lines+markers',
+        name = 'actual'
+    )
+    trace1 = go.Scatter(
+        x = dfs[stock].index[-datapoints:],
+        y = unscaled_preds.ravel()[-datapoints:],
+        mode = 'lines+markers',
+        name = 'predictions'
+    )
+    f = iplot({'data':[trace0, trace1], 'layout':layout})
 
 
 def plot_data_preds_scaled_conv1d(model, stock, dfs, scaled_ts, scaled_fs, train_test='all', train_frac=0.85):

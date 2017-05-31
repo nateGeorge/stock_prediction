@@ -43,6 +43,10 @@ def download_stocks(stocklist=STOCKLIST, fresh=False):
                 timedelta_step = 0
             elif WEEKDAY == 0:  # it's monday
                 timedelta_step = 3  # can be up to last friday
+            elif WEEKDAY in [5, 6]:  # if a weekend, last data is from friday
+                timedelta_step = WEEKDAY - 4
+            print('date gap:', TODAY.date() - stock.iloc[-2:].index[-1].date())
+            print('step, timedelta:', timedelta_step, datetime.timedelta(timedelta_step))
             if (TODAY.date() - stock.iloc[-2:].index[-1].date()) <= datetime.timedelta(timedelta_step):
                 dfs[s] = stock
                 print('latest date close enough to up-to-date:')

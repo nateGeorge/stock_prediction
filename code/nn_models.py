@@ -18,12 +18,11 @@ plotly.offline.init_notebook_mode()
 from plotly.offline import download_plotlyjs, init_notebook_mode, plot, iplot
 import plotly.graph_objs as go
 import math
+import pandas as pd
 
 # hyperparameters
 EPOCHS = 200
 BATCH = 100
-
-leaky_relu = LeakyReLU()
 
 
 def create_nn_data(train_fs, test_fs):
@@ -60,10 +59,10 @@ def create_model_1(X_train):
     """
     model = Sequential()
     model.add(LSTM(256, input_shape=X_train.shape[1:], activation=None, return_sequences=True))
-    model.add(leaky_relu)
+    model.add(elu)
     model.add(Dropout(0.5))
     model.add(LSTM(256, activation=None))
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     model.add(Dropout(0.5))
     model.add(Dense(1))
 
@@ -88,17 +87,17 @@ def create_model_complex(X_train):
                     kernel_regularizer=l2(0.01),
                     bias_regularizer=l2(0.01),
                     return_sequences=True))
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     # model.add(Dropout(0.5))
     model.add(LSTM(256,
                     activation=None,
                     kernel_initializer='glorot_normal',
                     kernel_regularizer=l2(0.01),
                     bias_regularizer=l2(0.01)))
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     model.add(Dense(256, kernel_initializer='glorot_normal'))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     model.add(Dropout(0.5))
     model.add(Reshape((-1, 1)))
     model.add(Conv1D(64,
@@ -108,7 +107,7 @@ def create_model_complex(X_train):
                     padding='valid',
                     activation=None))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     # https://github.com/fchollet/keras/issues/4403 note on TimeDistributed
     model.add(MaxPooling1D(pool_size=2,
                             strides=2,
@@ -120,7 +119,7 @@ def create_model_complex(X_train):
                     padding='valid',
                     activation=None))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     # https://github.com/fchollet/keras/issues/4403 note on TimeDistributed
     model.add(MaxPooling1D(pool_size=2,
                             strides=2,
@@ -128,15 +127,15 @@ def create_model_complex(X_train):
     model.add(Flatten())
     model.add(Dense(1024, kernel_initializer='glorot_normal'))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU)
     model.add(Dropout(0.5))
     model.add(Dense(512, kernel_initializer='glorot_normal'))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     model.add(Dropout(0.5))
     model.add(Dense(128, kernel_initializer='glorot_normal'))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     model.add(Dense(1, kernel_initializer='glorot_normal'))
 
     # build model using keras documentation recommended optimizer initialization
@@ -152,8 +151,6 @@ def create_model(X_train):
     """
     loss of 0.11 with 90 days history and 5 days prediction
     """
-    leaky_relu = LeakyReLU()
-
     model = Sequential()
     model.add(LSTM(256,
                     input_shape=X_train.shape[1:],
@@ -161,13 +158,13 @@ def create_model(X_train):
                     kernel_regularizer=l2(0.01),
                     bias_regularizer=l2(0.01),
                     return_sequences=True))
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     # model.add(Dropout(0.5))
     model.add(LSTM(256,
                     activation=None,
                     kernel_regularizer=l2(0.01),
                     bias_regularizer=l2(0.01)))
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     model.add(Dense(256))
     model.add(Dropout(0.5))
     model.add(Reshape((-1, 1)))
@@ -218,7 +215,7 @@ def create_conv1d_model(X_train):
                     input_shape=(X_train.shape[1], 1)
                     ))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     # https://github.com/fchollet/keras/issues/4403 note on TimeDistributed
     model.add(MaxPooling1D(pool_size=2,
                             strides=2,
@@ -232,7 +229,7 @@ def create_conv1d_model(X_train):
                     input_shape=(X_train.shape[1], 1)
                     ))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     # https://github.com/fchollet/keras/issues/4403 note on TimeDistributed
     model.add(MaxPooling1D(pool_size=2,
                             strides=2,
@@ -241,11 +238,11 @@ def create_conv1d_model(X_train):
     model.add(GlobalAveragePooling1D())
     model.add(Dense(256, kernel_initializer='glorot_normal'))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     model.add(Dropout(0.5))
     model.add(Dense(128, kernel_initializer='glorot_normal'))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     model.add(Dropout(0.5))
     model.add(Dense(1))
 
@@ -269,13 +266,13 @@ def create_model_lstm(X_train):
                     kernel_regularizer=l2(0.01),
                     bias_regularizer=l2(0.01),
                     return_sequences=True))
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     # model.add(Dropout(0.5))
     model.add(LSTM(256,
                     activation=None,
                     kernel_regularizer=l2(0.01),
                     bias_regularizer=l2(0.01)))
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     model.add(Dense(256))
     model.add(Dropout(0.5))
     model.add(Reshape((-1, 1)))
@@ -301,6 +298,7 @@ def create_model_lstm(X_train):
     model.add(Dense(64))
     model.add(Dropout(0.5))
     model.add(BatchNormalization())
+    model.add(LeakyReLU())
     model.add(Dense(1))
 
     # compile the model
@@ -324,19 +322,19 @@ def embed_model(X_train):
 
     model.add(Conv1D(32, 3, padding='valid', activation='relu', strides=1))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     model.add(MaxPooling1D(pool_size=2,
                             strides=2,
                             padding='valid'))
     model.add(Conv1D(64, 3, padding='valid', activation='relu', strides=1))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
     model.add(GlobalMaxPooling1D())
 
     model.add(Dense(100))
     model.add(Dropout(0.2))
     model.add(BatchNormalization())
-    model.add(leaky_relu)
+    model.add(LeakyReLU())
 
     model.add(Dense(1))
 
@@ -520,6 +518,36 @@ def plot_data_preds_unscaled(model, stock, dfs, t_scalers, scaled_ts, scaled_fs,
         name = 'predictions'
     )
     f = iplot({'data':[trace0, trace1], 'layout':layout})
+
+
+def plot_data_preds_unscaled_future(model, stock, dfs, t_scalers, scaled_ts, scaled_fs, targs, datapoints=300, future_days=20):
+    """
+    plots training data and future prices of unseen data
+    """
+    for_preds = scaled_fs[stock].reshape(scaled_fs[stock].shape[0],
+                                        1, scaled_fs[stock].shape[1])
+    preds = model.predict(for_preds).ravel()
+    unscaled_preds = t_scalers[stock].reform_data(preds, orig=True)
+
+    if datapoints == 'all':
+        datapoints = dfs[stock].shape[0]
+
+    # need to generate more dates for the unseen data
+    pred_dates = dfs[stock].index + pd.Timedelta(str(future_days) + ' days')
+
+    trace0 = go.Scatter(
+        x = pred_dates[-datapoints:],
+        y = targs[stock][-datapoints:],
+        mode = 'lines+markers',
+        name = 'actual'
+    )
+    trace1 = go.Scatter(
+        x = pred_dates[-datapoints:],
+        y = unscaled_preds.ravel()[-datapoints:],
+        mode = 'lines+markers',
+        name = 'predictions'
+    )
+    f = iplot({'data':[trace0, trace1]})
 
 
 def plot_data_preds_unscaled_embed(model, stock, dfs, t_scalers, scaled_ts, scaled_fs, targs, datapoints=300, train_frac=0.85):

@@ -83,6 +83,23 @@ class data_scaler(object):
         unrolled = unscaled * mva
         return unrolled
 
+    def reform_future_preds(self, data, datasetnum=None, orig=False):
+        """
+        Re-constructs original data from the transformed data.
+        Requires the dataset number or to specify
+        that its the original data
+        """
+        if orig is True and datasetnum is not None:
+            print('error! must only supply original or supplimentary dataset')
+
+        unscaled = self.scaler.inverse_transform(data)
+        if datasetnum is not None:
+            mva = self.mvas['set' + str(datasetnum)]
+        elif orig == True:
+            mva = self.mvas['orig']
+        unrolled = unscaled * mva
+        return unrolled
+
 
 # are these supposed to be in the class?
 def scale_datasets(feats, targs):

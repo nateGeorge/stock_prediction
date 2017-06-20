@@ -25,20 +25,22 @@ def create_hist_feats(dfs, history_days=30, future_days=5):
     """
     feats = {}
     targs = {}
+    dates = {}
     for s in dfs.keys():
         data_points = dfs[s].shape[0]
         # create time-lagged features
         features = []
         targets = []
-        pred_dates = dfs[s].iloc[history_days + future_days:]  # dates of the prediction days
+        pred_dates = dfs[s].iloc[history_days + future_days:].index  # dates of the prediction days
         for i in range(history_days, data_points - future_days):
             features.append(dfs[s].iloc[i - history_days:i + 1][['Adj_Open', 'Adj_High', 'Adj_Low', 'Adj_Close', 'Adj_Volume']].values.ravel())
             targets.append(dfs[s].iloc[i + future_days]['Adj_Close'])
 
         feats[s] = np.array(features)
         targs[s] = np.array(targets)
+        dates[s] = pred_dates
 
-    return feats, targs, pred_dates
+    return feats, targs, dates
 
 
 def create_hist_feats_all(dfs, history_days=30, future_days=5):

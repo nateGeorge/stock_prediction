@@ -402,10 +402,11 @@ def plot_losses(history):
     f = iplot({'data':[trace0, trace1]})
 
 
-def plot_data_preds_scaled(model, stock, dfs, scaled_ts, scaled_fs, train_test='all', train_frac=0.85):
+def plot_data_preds_scaled(model, stock, scaled_ts, scaled_fs, dates, train_test='all', train_frac=0.85, future_days=5):
     if train_test == 'all':
         # vertical line should be on the first testing set point
-        train_size = int(train_frac * dfs[stock].shape[0])
+        dates = dates[stock]
+        train_size = int(train_frac * dates.shape[0])
         print(train_size)
         feats = scaled_fs[stock]
         for_pred = feats.reshape(feats.shape[0],
@@ -416,24 +417,37 @@ def plot_data_preds_scaled(model, stock, dfs, scaled_ts, scaled_fs, train_test='
         {
             'type': 'rect',
             # stupid hack to deal with pandas issue
-            'x0': dfs[stock].iloc[train_size:train_size + 1].index[0].date().strftime('%Y-%m-%d'),
+            'x0': dates[train_size].date().strftime('%Y-%m-%d'),
             'y0': 1.1 * min([min(scaled_ts[stock].ravel()), min(preds)]),
-            'x1': dfs[stock].iloc[-2:-1].index[0].date().strftime('%Y-%m-%d'),
+            'x1': dates[-1].date().strftime('%Y-%m-%d'),
             'y1': 1.1 * max([max(scaled_ts[stock].ravel()), max(preds)]),
             'line': {
                 'color': 'rgb(255, 0, 0)',
                 'width': 2,
             },
             'fillcolor': 'rgba(128, 0, 128, 0.05)',
+        },
+        {
+            'type': 'line',
+            # first line is just before first point of test set
+            'x0': dates[train_size+future_days].date().strftime('%Y-%m-%d'),
+            'y0': 1.1 * min([min(scaled_ts[stock].ravel()), min(preds)]),
+            'x1': dates[train_size+future_days].date().strftime('%Y-%m-%d'),
+            'y1': 1.1 * max([max(scaled_ts[stock].ravel()), max(preds)]),
+            'line': {
+                'color': 'rgb(0, 255, 0)',
+                'width': 2,
+            }
         }]}
+
         trace0 = go.Scatter(
-            x = dfs[stock].index,
+            x = dates,
             y = scaled_ts[stock].ravel(),
             mode = 'lines+markers',
             name = 'actual'
         )
         trace1 = go.Scatter(
-            x = dfs[stock].index,
+            x = dates,
             y = preds,
             mode = 'lines+markers',
             name = 'predictions'
@@ -479,8 +493,9 @@ def plot_data_preds_scaled(model, stock, dfs, scaled_ts, scaled_fs, train_test='
         print('error!  You have to supply train_test as \'all\', \'train\', or \'test\'')
 
 
-def plot_data_preds_unscaled(model, stock, dfs, t_scalers, scaled_ts, scaled_fs, targs, datapoints=300, train_frac=0.85):
-    train_size = int(train_frac * dfs[stock].shape[0])
+def plot_data_preds_unscaled(model, stock, t_scalers, scaled_ts, scaled_fs, targs, dates, datapoints=300, train_frac=0.85, future_days=5):
+    dates = dates[stock]
+    train_size = int(train_frac * dates.shape[0])
 
     for_preds = scaled_fs[stock].reshape(scaled_fs[stock].shape[0],
                                         1, scaled_fs[stock].shape[1])
@@ -488,31 +503,43 @@ def plot_data_preds_unscaled(model, stock, dfs, t_scalers, scaled_ts, scaled_fs,
     unscaled_preds = t_scalers[stock].reform_data(preds, orig=True)
 
     if datapoints == 'all':
-        datapoints = dfs[stock].shape[0]
+        datapoints = dates.shape[0]
 
     layout = {'shapes': [
     {
         'type': 'rect',
-        # stupid hack to deal with pandas issue
-        'x0': dfs[stock].iloc[train_size:train_size + 1].index[0].date().strftime('%Y-%m-%d'),
+        # first line is just before first point of test set
+        'x0': dates[train_size].date().strftime('%Y-%m-%d'),
         'y0': 1.1 * min([min(targs[stock][-datapoints:]), min(unscaled_preds.ravel()[-datapoints:])]),
-        'x1': dfs[stock].iloc[-2:-1].index[0].date().strftime('%Y-%m-%d'),
+        'x1': dates[-1].date().strftime('%Y-%m-%d'),
         'y1': 1.1 * max([max(targs[stock][-datapoints:]), max(unscaled_preds.ravel()[-datapoints:])]),
         'line': {
             'color': 'rgb(255, 0, 0)',
             'width': 2,
         },
         'fillcolor': 'rgba(128, 0, 128, 0.05)',
+    },
+    {
+        'type': 'line',
+        # first line is just before first point of test set
+        'x0': dates[train_size+future_days].date().strftime('%Y-%m-%d'),
+        'y0': 1.1 * min([min(targs[stock][-datapoints:]), min(unscaled_preds.ravel()[-datapoints:])]),
+        'x1': dates[train_size+future_days].date().strftime('%Y-%m-%d'),
+        'y1': 1.1 * max([max(targs[stock][-datapoints:]), max(unscaled_preds.ravel()[-datapoints:])]),
+        'line': {
+            'color': 'rgb(0, 255, 0)',
+            'width': 2,
+        }
     }]}
 
     trace0 = go.Scatter(
-        x = dfs[stock].index[-datapoints:],
+        x = dates[-datapoints:],
         y = targs[stock][-datapoints:],
         mode = 'lines+markers',
         name = 'actual'
     )
     trace1 = go.Scatter(
-        x = dfs[stock].index[-datapoints:],
+        x = dates[-datapoints:],
         y = unscaled_preds.ravel()[-datapoints:],
         mode = 'lines+markers',
         name = 'predictions'
@@ -520,7 +547,7 @@ def plot_data_preds_unscaled(model, stock, dfs, t_scalers, scaled_ts, scaled_fs,
     f = iplot({'data':[trace0, trace1], 'layout':layout})
 
 
-def plot_data_preds_unscaled_future(model, stock, dfs, t_scalers, scaled_ts, scaled_fs, targs, datapoints=300, future_days=20):
+def plot_data_preds_unscaled_future(model, stock, t_scalers, scaled_ts, scaled_fs, targs, dates, datapoints=300, future_days=20):
     """
     plots training data and future prices of unseen data
     """
@@ -530,7 +557,7 @@ def plot_data_preds_unscaled_future(model, stock, dfs, t_scalers, scaled_ts, sca
     unscaled_preds = t_scalers[stock].reform_data(preds, orig=True)
 
     if datapoints == 'all':
-        datapoints = dfs[stock].shape[0]
+        datapoints = dates[stock].shape[0]
 
     # need to generate more dates for the unseen data
     pred_dates = dfs[stock].index + pd.Timedelta(str(future_days) + ' days')

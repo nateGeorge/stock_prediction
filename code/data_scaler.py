@@ -83,6 +83,7 @@ class data_scaler(object):
         unrolled = unscaled * mva
         return unrolled
 
+
     def reform_future_preds(self, data, datasetnum=None, orig=False):
         """
         Re-constructs original data from the transformed data.

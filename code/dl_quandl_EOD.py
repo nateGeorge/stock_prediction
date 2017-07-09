@@ -39,7 +39,7 @@ def download_stocks(stocklist=STOCKLIST, fresh=False):
             stock = pd.read_csv(stockfile, index_col=0)
             stock.index = pd.to_datetime(stock.index)
             timedelta_step = 1
-            if HOUR > 2:
+            if HOUR > 2 and WEEKDAY not in [5, 6]:  # for mtn time
                 timedelta_step = 0
             elif WEEKDAY == 0:  # it's monday
                 timedelta_step = 3  # can be up to last friday

@@ -38,6 +38,16 @@ def create_nn_data(train_fs, test_fs):
     return X_trains, X_tests
 
 
+def create_nn_data_pcts(train, test):
+    # NOTE: to use keras's RNN LSTM module our input must be reshaped to [samples, stepsize, window size]
+    # our stepsize is 1 because we increment the time by 1 for each sample
+    # window size is 30 currently
+    X_train = np.asarray(np.reshape(train, (train.shape[0], 1, train.shape[1])))
+    X_test = np.asarray(np.reshape(test, (test.shape[0], 1, test.shape[1])))
+
+    return X_train, X_test
+
+
 def create_nn_data4conv1d(train_fs, test_fs):
     # NOTE: to use keras's RNN LSTM module our input must be reshaped to [samples, stepsize, window size]
     # our stepsize is 1 because we increment the time by 1 for each sample

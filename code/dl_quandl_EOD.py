@@ -57,6 +57,7 @@ def update_all_stocks(return_headers=False):
     if return_headers:
         df = pd.read_csv('../stockdata/' + \
                         z.filelist[0].filename, index_col=1, parse_dates=True)
+        new_c = [re.sub('.\s', '_', c) for c in df.columns]
         return df.columns
 
     df = pd.read_csv('../stockdata/' + \
@@ -65,6 +66,7 @@ def update_all_stocks(return_headers=False):
     os.remove('../stockdata/' + z.filelist[0].filename)
     df = pd.read_csv('../stockdata/all_stocks.csv.gzip',
                         parse_dates=True,
+                        index_col=0,
                         compression='gzip')
     return df
 

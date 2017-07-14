@@ -1,8 +1,15 @@
-import quandl
+# core
+import io
 import os
-import pandas as pd
+import time
+import zipfile
 import datetime
+import requests as req
 from pytz import timezone
+
+# installed
+import quandl
+import pandas as pd
 
 # get todays date for checking if files up-to-date
 MTN = timezone('America/Denver')
@@ -13,13 +20,92 @@ HOUR = TODAY.hour
 Q_KEY = os.environ.get('quandl_api')
 STOCKLIST = "../stockdata/goldstocks.txt"
 
+quandl.ApiConfig.api_key = Q_KEY
+
+def get_stocklist():
+    """
+    """
+    url = 'http://static.quandl.com/end_of_day_us_stocks/ticker_list.csv'
+    df = pd.read_csv(url)
+    return df
+
+
+def download_all_stocks_fast():
+    """
+    """
+    zip_file_url = 'https://www.quandl.com/api/v3/databases/EOD/data?api_key=' + Q_KEY
+    r = req.get(zip_file_url)
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    z.extractall(path='../stockdata/')
+    headers = update_all_stocks(return_headers=True)
+    df = pd.read_csv('../stockdata/' + \
+                    z.filelist[0].filename,
+                    names=headers,
+                    index_col=1,
+                    parse_dates=True)
+    df.to_csv('../stockdata/all_stocks.csv.gzip', compression='gzip')
+    os.remove('../stockdata/' + z.filelist[0].filename)
+    return df
+
+
+def update_all_stocks(return_headers=False):
+    zip_file_url = 'https://www.quandl.com/api/v3/databases/EOD/download?api_key=' + \
+        Q_KEY + '&download_type=partial'
+    r = req.get(zip_file_url)
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    z.extractall(path='../stockdata/')
+    if return_headers:
+        df = pd.read_csv('../stockdata/' + \
+                        z.filelist[0].filename, index_col=1, parse_dates=True)
+        return df.columns
+
+    df = pd.read_csv('../stockdata/' + \
+                    z.filelist[0].filename, index_col=1, parse_dates=True)
+    df.to_csv('../stockdata/all_stock.csv.gzip', mode='a', compression='gzip')
+    os.remove('../stockdata/' + z.filelist[0].filename)
+    df = pd.read_csv('../stockdata/all_stocks.csv.gzip',
+                        parse_dates=True,
+                        compression='gzip')
+    return df
+
+
+def get_last_n_days(n=100):
+    """
+    Retrieves and saves last n days from the full stock dataset for analysis.
+    """
+    df = pd.read_csv('../stockdata/all_stocks.csv.gzip', parse_dates=True)
+    dates = sorted(df.index.unique())[-n:]
+    new_df = df.loc[dates]
+    new_df.to_csv('../stockdata/all_stocks_last' + str(n) + '_days.csv.gzip',
+                    compression='gzip')
+    return new_df
+
+
+def download_all_stocks():
+    """
+    With about 8k stocks and about 2s per stock download, this would take forever.
+    Don't use.
+    """
+    stocks = get_stocklist()
+    dfs = {}
+    for i, r in stocks.iterrows():
+        start = time.time()
+        s = r['Ticker']
+        stockfile = '../stockdata/' + s + '.csv.gz'
+        print('downloading', s)
+        stock = quandl.get('EOD/' + s)
+        stock.to_csv(stockfile, compression='gzip')
+        dfs[s] = stock
+        print('took', time.time() - start, 's')
+
+    return dfs
+
 
 def download_stocks(stocklist=STOCKLIST, fresh=False):
     """
     Downloads stock data and returns dict of pandas dataframes.
     First checks if data is up to date, if so, just loads the data.
     """
-    quandl.ApiConfig.api_key = Q_KEY
     # load stocklist
     with open(stocklist) as f:
         stocks = f.read().strip('\n').split('\n')

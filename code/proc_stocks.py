@@ -127,11 +127,11 @@ def scale_pcts(df):
     return df, scalers
 
 
-def unscale_pct_close_preds(df, scalers, days=20):
+def unscale_pct_close_preds(preds, scalers, days=20):
     resc = []
     cc_sc = scalers[2]
     for i in range(df.iloc[-days:].shape[0]):
-        pct = df['close-close_pct_scaled'].iloc[-days + i]
+        pct = preds.iloc[-days + i]
         unsc = cc_sc.inverse_transform(pct.reshape(-1, 1))[0][0]
         resc.append(unsc)
 

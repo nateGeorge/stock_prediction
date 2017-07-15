@@ -1,6 +1,7 @@
 # core
 import io
 import os
+import re
 import time
 import zipfile
 import datetime
@@ -30,7 +31,7 @@ def get_stocklist():
     return df
 
 
-def download_all_stocks_fast():
+def download_all_stocks_fast(write_csv=False):
     """
     """
     zip_file_url = 'https://www.quandl.com/api/v3/databases/EOD/data?api_key=' + Q_KEY
@@ -43,32 +44,66 @@ def download_all_stocks_fast():
                     names=headers,
                     index_col=1,
                     parse_dates=True)
-    df.to_csv('../stockdata/all_stocks.csv.gzip', compression='gzip')
-    os.remove('../stockdata/' + z.filelist[0].filename)
+    df.sort_index(inplace=True)
+    if write_csv:
+        # compression really slows it down...don't recommend
+        df.to_csv('../stockdata/all_stocks.csv.gzip', compression='gzip')
+        os.remove('../stockdata/' + z.filelist[0].filename)
+
     return df
 
 
-def update_all_stocks(return_headers=False):
+def update_all_stocks(return_headers=False, update_small_file=False):
+    """
+    return_headers will just return the column names.
+    update_small_file will just update the small file that starts on 1/1/2000
+    """
+    # 7-13-2017: 28788363 rows in full df
     zip_file_url = 'https://www.quandl.com/api/v3/databases/EOD/download?api_key=' + \
         Q_KEY + '&download_type=partial'
     r = req.get(zip_file_url)
     z = zipfile.ZipFile(io.BytesIO(r.content))
     z.extractall(path='../stockdata/')
     if return_headers:
-        df = pd.read_csv('../stockdata/' + \
-                        z.filelist[0].filename, index_col=1, parse_dates=True)
+        df = pd.read_csv('../stockdata/' + z.filelist[0].filename, parse_dates=True)
+        df.set_index('Date', inplace=True)
         new_c = [re.sub('.\s', '_', c) for c in df.columns]
-        return df.columns
+        return new_c
 
-    df = pd.read_csv('../stockdata/' + \
-                    z.filelist[0].filename, index_col=1, parse_dates=True)
-    df.to_csv('../stockdata/all_stock.csv.gzip', mode='a', compression='gzip')
+    df = pd.read_csv('../stockdata/' + z.filelist[0].filename)
+    # it  won't parse dates when it reads...
+    df['Date'] = pd.to_datetime(df['Date'])
+    df.set_index('Date', inplace=True)
+    # fix problem with . and _ in Adjusted cols
+    new_c = [re.sub('.\s', '_', c) for c in df.columns]
+    df.columns = new_c
+    full_df = pd.read_csv('../stockdata/all_stocks.csv.gzip',
+                    parse_dates=True,
+                    compression='gzip',
+                    index_col=0)
+    if (full_df.columns == df.columns).mean() != 1:
+        print('WARNING! Columns in the full df do not match the updated df columns.')
+        print('full_df cols:')
+        print(full_df.columns)
+        print('')
+        print('update df cols:')
+        print(df.columns)
+        print('')
+        print('aborting and returning current full_df')
+        return full_df
+
+    if df.index.max() > full_df.index.max():
+        df.to_csv('../stockdata/all_stocks.csv.gzip', mode='a', compression='gzip')
+        dtypes = ['object'] + ['float64'] * 10
+        full_df = pd.read_csv('../stockdata/all_stocks.csv.gzip',
+                                parse_dates=True,
+                                compression='gzip',
+                                index_col=0,
+                                dtype=dtypes)
+
     os.remove('../stockdata/' + z.filelist[0].filename)
-    df = pd.read_csv('../stockdata/all_stocks.csv.gzip',
-                        parse_dates=True,
-                        index_col=0,
-                        compression='gzip')
-    return df
+
+    return full_df
 
 
 def get_last_n_days(n=100):

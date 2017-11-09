@@ -12,11 +12,16 @@ from pytz import timezone
 import quandl
 import pandas as pd
 
+# custom
+from utils import get_home_dir
+
 # get todays date for checking if files up-to-date
 MTN = timezone('America/Denver')
 TODAY = datetime.datetime.now(MTN)
 WEEKDAY = TODAY.weekday()
 HOUR = TODAY.hour
+
+HOME_DIR = get_home_dir()
 
 Q_KEY = os.environ.get('quandl_api')
 STOCKLIST = "../stockdata/goldstocks.txt"
@@ -188,10 +193,76 @@ def download_stocks(stocklist=STOCKLIST, fresh=False):
     return dfs
 
 
-def load_stocks(stocks=['GLD', 'DUST', 'NUGT']):
+def load_stocks(datapath=HOME_DIR + 'stockdata/',
+                stocks=['GLD', 'DUST', 'NUGT'],
+                make_files=True,
+                eod_datapath='/home/nate/eod_data/EOD_{}.h5',
+                latest_eod='20170812'):
+    """
+    :param datapath: string; path to stock datafiles
+    :param stocks: list of strings, stock tickers (must be uppercase)
+    :param make_files: bool, will save individual stock file if true (loading full dataset is quite slow)
+    :param eod_datapath: string, path to full eod data
+    :param latest_eod: string, yyyymmdd; latest day eod data was collected
+
+    :returns: dictionary of dataframes with tickers as keys
+    """
+    eod_datapath = eod_datapath.format(latest_eod)
     dfs = {}
+    full_df = None
     for s in stocks:
-        df = pd.read_csv('../stockdata/' + s + '.csv.gz', index_col=0, parse_dates=True)
+        filename = datapath + s + '_{}.h5'.format(latest_eod)
+        if os.path.exists(filename):
+            df = pd.read_hdf(filename, index_col=0, parse_dates=True)
+        else:
+            if full_df is None:
+                headers = ['Ticker',
+                           'Date',
+                           'Open',
+                           'High',
+                           'Low',
+                           'Close',
+                           'Volume',
+                           'Dividend',
+                           'Split',
+                           'Adj_Open',
+                           'Adj_High',
+                           'Adj_Low',
+                           'Adj_Close',
+                           'Adj_Volume']
+                full_df = pd.read_hdf(eod_datapath, names=headers)
+                tickers = set(full_df['Ticker'])
+
+            if s in tickers:
+                df = full_df[full_df['Ticker'] == s]
+                df['Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d')
+                df.set_index('Date', inplace=True)
+                if make_files:
+                    df.to_hdf(filename, key='data', comlib='blosc', complevel=9)
+            else:
+                print('stock not in tickers')
+
         dfs[s] = df
 
     return dfs
+
+
+def convert_full_df_to_hdf(eod_datapath='/home/nate/eod_data/EOD_{}.csv', latest_eod='20170812'):
+    eod_datapath = eod_datapath.format(latest_eod)
+    eod_datapath_h5 = eod_datapath.strip('.csv')
+    headers = ['Ticker',
+               'Date',
+               'Open',
+               'High',
+               'Low',
+               'Close',
+               'Volume',
+               'Dividend',
+               'Split',
+               'Adj_Open',
+               'Adj_High',
+               'Adj_Low',
+               'Adj_Close',
+               'Adj_Volume']
+    full_df = pd.read_csv(eod_datapath, names=headers)
+    full_df.to_hdf(eod_datapath_h5, key='data', complib='blosc', complevel=9)

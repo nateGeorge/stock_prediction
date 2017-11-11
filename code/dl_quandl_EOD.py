@@ -240,7 +240,7 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
                 if make_files:
                     df.to_hdf(filename, key='data', comlib='blosc', complevel=9)
             else:
-                print('stock not in tickers')
+                print('stock not in tickers:', s)
 
         dfs[s] = df
 

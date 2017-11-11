@@ -145,6 +145,8 @@ def create_tas(bars, verbose=False, ohlcv_cols=['High', 'Low', 'Open', 'Close', 
     :returns: pandas dataframe with TA signals calculated (modifies dataframe in place)
     """
     h, l, o, c, v = ohlcv_cols
+    if 'typical_price' not in bars.columns:
+        bars['typical_price'] = bars[['High', 'Low', 'Close']].mean(axis=1)
 
     # bollinger bands
     # strange bug, if values are small, need to multiply to larger value for some reason

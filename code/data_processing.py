@@ -28,10 +28,12 @@ def load_stocks(stocks=['NAVI', 'EXAS'], TAs=True, finra_shorts=True, short_inte
     dfs = dlq.load_stocks(stocks=stocks)
     ret_stocks = sorted(dfs.keys())  # sometimes some stocks are not in there
     for s in ret_stocks:
-        dfs[s].reset_index(inplace=True, drop=True)
+        print(s)
+        dfs[s].reset_index(inplace=True)
 
     if TAs:
         for s in ret_stocks:
+            # TODO: multiprocessing
             cts.create_tas(dfs[s])
 
     if finra_shorts:

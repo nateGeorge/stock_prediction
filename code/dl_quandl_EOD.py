@@ -234,20 +234,23 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
                 tickers = set(full_df['Ticker'])
 
             if s in tickers:
+                print(s, 'in tickers')
                 df = full_df[full_df['Ticker'] == s]
-                df['Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d')
+                df.loc[:, 'Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d')
                 df.set_index('Date', inplace=True)
                 if make_files:
                     df.to_hdf(filename, key='data', comlib='blosc', complevel=9)
+
+                dfs[s] = df
             else:
                 print('stock not in tickers:', s)
+                continue
 
-        dfs[s] = df
 
     if len(dfs) == 0:
         print('WARNING: no stocks were in the data, returning None')
         return None
-    
+
     return dfs
 
 

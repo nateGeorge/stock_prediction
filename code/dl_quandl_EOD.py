@@ -244,6 +244,10 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
 
         dfs[s] = df
 
+    if len(dfs) == 0:
+        print('WARNING: no stocks were in the data, returning None')
+        return None
+    
     return dfs
 
 

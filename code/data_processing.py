@@ -26,12 +26,13 @@ def load_stocks(stocks=['NAVI', 'EXAS'], TAs=True, finra_shorts=True, short_inte
     :returns: dict of pandas dataframes with tickers as keys
     """
     dfs = dlq.load_stocks(stocks=stocks)
-    for s in stocks:
-        dfs[s].reset_index(inplace=True)
-    if TAs:
-        for s in stocks:
-            cts.create_tas(dfs[s])
+    ret_stocks = sorted(dfs.keys())  # sometimes some stocks are not in there
+    for s in ret_stocks:
+        dfs[s].reset_index(inplace=True, drop=True)
 
+    if TAs:
+        for s in ret_stocks:
+            cts.create_tas(dfs[s])
 
     if finra_shorts:
         finra_shorts = sfs.load_all_data()
@@ -44,7 +45,7 @@ def load_stocks(stocks=['NAVI', 'EXAS'], TAs=True, finra_shorts=True, short_inte
 
     sh_int = {}
     fin_sh = {}
-    for s in stocks:
+    for s in ret_stocks:
         new = dfs[s][dfs[s]['Date'] >= ss_sh[ss_sh['Ticker'] == s]['Date'].min()]
         new = new.merge(ss_sh, how='left', on=['Ticker', 'Date'])
         new.ffill(inplace=True)
@@ -74,8 +75,10 @@ def make_gain_targets(df, future=5):
     df = df.iloc[future:]
 
 
-def EDA():
+def EDA(dfs=None, sh_int=None, fin_sh=None):
+    # just encapsulating the first EDA on exas and navi
     dfs, sh_int, fin_sh = load_stocks()
+
     make_gain_targets(sh_int['EXAS'])
     make_gain_targets(sh_int['NAVI'])
 

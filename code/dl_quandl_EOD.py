@@ -5,12 +5,14 @@ import re
 import time
 import zipfile
 import datetime
-import requests as req
-from pytz import timezone
 
 # installed
 import quandl
 import pandas as pd
+import requests as req
+from pytz import timezone
+from concurrent.futures import ProcessPoolExecutor
+
 
 # custom
 from utils import get_home_dir
@@ -193,11 +195,26 @@ def download_stocks(stocklist=STOCKLIST, fresh=False):
     return dfs
 
 
+def load_one_stock_hdf(filename):
+    df = pd.read_hdf(filename, index_col=0, parse_dates=True)
+    return df
+
+
+def load_one_stock_fulldf(df, make_files, filename):
+    df.loc[:, 'Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d')
+    df.set_index('Date', inplace=True)
+    if make_files:
+        df.to_hdf(filename, key='data', comlib='blosc', complevel=9)
+
+    return df
+
+
 def load_stocks(datapath=HOME_DIR + 'stockdata/',
                 stocks=['GLD', 'DUST', 'NUGT'],
                 make_files=True,
                 eod_datapath='/home/nate/eod_data/EOD_{}.h5',
-                latest_eod='20170812'):
+                latest_eod='20170812',
+                verbose=False):
     """
     :param datapath: string; path to stock datafiles
     :param stocks: list of strings, stock tickers (must be uppercase)
@@ -209,43 +226,50 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
     """
     eod_datapath = eod_datapath.format(latest_eod)
     dfs = {}
-    full_df = None
-    for s in stocks:
-        filename = datapath + s + '_{}.h5'.format(latest_eod)
-        if os.path.exists(filename):
-            df = pd.read_hdf(filename, index_col=0, parse_dates=True)
-        else:
-            if full_df is None:
-                headers = ['Ticker',
-                           'Date',
-                           'Open',
-                           'High',
-                           'Low',
-                           'Close',
-                           'Volume',
-                           'Dividend',
-                           'Split',
-                           'Adj_Open',
-                           'Adj_High',
-                           'Adj_Low',
-                           'Adj_Close',
-                           'Adj_Volume']
-                full_df = pd.read_hdf(eod_datapath, names=headers)
-                tickers = set(full_df['Ticker'])
-
+    # load big df with everything
+    headers = ['Ticker',
+               'Date',
+               'Open',
+               'High',
+               'Low',
+               'Close',
+               'Volume',
+               'Dividend',
+               'Split',
+               'Adj_Open',
+               'Adj_High',
+               'Adj_Low',
+               'Adj_Close',
+               'Adj_Volume']
+    full_df = pd.read_hdf(eod_datapath, names=headers)
+    tickers = set(full_df['Ticker'])
+    jobs = []
+    with ProcessPoolExecutor(max_workers=None) as executor:
+        for s in stocks:
             if s in tickers:
-                print(s, 'in tickers')
-                df = full_df[full_df['Ticker'] == s]
-                df.loc[:, 'Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d')
-                df.set_index('Date', inplace=True)
-                if make_files:
-                    df.to_hdf(filename, key='data', comlib='blosc', complevel=9)
-
-                dfs[s] = df
+                filename = datapath + s + '_{}.h5'.format(latest_eod)
+                if os.path.exists(filename):
+                    r = executor.submit(load_one_stock_hdf, filename)
+                    jobs.append((s, r))
+                else:
+                    if verbose:
+                        print('loading', s)
+                    df = full_df[full_df['Ticker'] == s]
+                    r = executor.submit(load_one_stock_fulldf,
+                                        df,
+                                        make_files,
+                                        filename)
             else:
-                print('stock not in tickers:', s)
+                if verbose:
+                    print(s, 'not in tickers')
                 continue
 
+    for s, r in jobs:
+        res = r.result()
+        if res is not None:
+            dfs[s] = res
+        else:
+            print('result was None for', s)
 
     if len(dfs) == 0:
         print('WARNING: no stocks were in the data, returning None')

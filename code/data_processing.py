@@ -3,6 +3,7 @@ for loading and processing stockdata
 """
 # core
 import sys
+import gc
 
 # installed
 import numpy as np
@@ -156,18 +157,22 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
                 TAs=True,
                 finra_shorts=True,
                 short_interest=True,
-                verbose=False):
+                verbose=False,
+                earliest_date='20100101'):
     """
     :param stocks: list of strings; tickers (must be caps)
     :param TAs: boolean, if true, calculates technical indicators
     :param shorts: boolean, if true, adds all short data
+    :param verbose: boolean, prints more debug if true
+    :param earliest_date: if using an abbreviated EOD .h5 file (for quicker
+                            loading), provide earliest date
 
     :returns: dict of pandas dataframes with tickers as keys,
                 dict of dataframes merged with short interest data (sh_int),
                 dict of dataframes merged with finra data (fin_sh)
     """
     print('loading stocks...')
-    dfs = dlq.load_stocks(stocks=stocks, verbose=verbose)
+    dfs = dlq.load_stocks(stocks=stocks, verbose=verbose, earliest_date=earliest_date)
     ret_stocks = sorted(dfs.keys())  # sometimes some stocks are not in there
 
     jobs = []
@@ -185,6 +190,9 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
             dfs[s] = res
         else:
             print('result is None for', s)
+
+    del jobs
+    gc.collect()
 
     for s in ret_stocks:
         dfs[s].reset_index(inplace=True)
@@ -205,12 +213,15 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
                     r = executor.submit(make_fn_df, s, dfs[s], fn_grp.loc[s])
                     jobs.append((s, r))
 
-            for s, r in jobs:
-                res = r.result()
-                if res is not None:
-                    fin_sh[s] = res
-                else:
-                    print('result is None for', s)
+        for s, r in jobs:
+            res = r.result()
+            if res is not None:
+                fin_sh[s] = res
+            else:
+                print('result is None for', s)
+
+        del jobs
+        gc.collect()
 
     if short_interest:
         print('getting short interest and merging...')
@@ -234,6 +245,9 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
                 sh_int[s] = res
             else:
                 print('result is None for', s)
+
+        del jobs
+        gc.collect()
 
     return dfs, sh_int, fin_sh
 
@@ -487,21 +501,24 @@ if __name__ == "__main__":
     future = 10
     hist_points = 40
     make_all_sh_future(sh_int, future=future, hist_points=hist_points)
+    del dfs
+    del fin_sh
+    gc.collect()
 
     # make historical feats for all
     targ_col = str(future) + '_day_price_diff_pct'
     feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col, 'Ticker'])))
     all_feats, all_targs = [], []
-    for s in sh_int_stocks:
-        print(s)
-        if sh_int[s].shape[0] > hist_points:
-            new_feats, new_targs, _ = create_hist_feats(sh_int[s][feat_cols].values,
-                                                            sh_int[s][targ_col].values,
-                                                            sh_int[s].index.values,
-                                                            hist_points=hist_points,
-                                                            future=future)
-            all_feats.append(new_feats)
-            all_targs.append(new_targs)
+    # for s in sh_int_stocks:
+    #     print(s)
+    #     if sh_int[s].shape[0] > hist_points:
+    #         new_feats, new_targs, _ = create_hist_feats(sh_int[s][feat_cols].values,
+    #                                                         sh_int[s][targ_col].values,
+    #                                                         sh_int[s].index.values,
+    #                                                         hist_points=hist_points,
+    #                                                         future=future)
+    #         all_feats.append(new_feats)
+    #         all_targs.append(new_targs)
             # all_dates.append(dates)
 
     # make giant combination of all stocks

@@ -5,6 +5,7 @@ import re
 import time
 import zipfile
 import datetime
+import glob
 
 # installed
 import quandl
@@ -12,7 +13,8 @@ import pandas as pd
 import requests as req
 from pytz import timezone
 from concurrent.futures import ProcessPoolExecutor
-
+import pandas_market_calendars as mcal
+import pytz
 
 # custom
 from utils import get_home_dir
@@ -24,6 +26,20 @@ WEEKDAY = TODAY.weekday()
 HOUR = TODAY.hour
 
 HOME_DIR = get_home_dir()
+HEADERS = ['Ticker',
+           'Date',
+           'Open',
+           'High',
+           'Low',
+           'Close',
+           'Volume',
+           'Dividend',
+           'Split',
+           'Adj_Open',
+           'Adj_High',
+           'Adj_Low',
+           'Adj_Close',
+           'Adj_Volume']
 
 Q_KEY = os.environ.get('quandl_api')
 STOCKLIST = "../stockdata/goldstocks.txt"
@@ -38,7 +54,7 @@ def get_stocklist():
     return df
 
 
-def download_all_stocks_fast(write_csv=False):
+def download_all_stocks_fast_csv(write_csv=False):
     """
     """
     zip_file_url = 'https://www.quandl.com/api/v3/databases/EOD/data?api_key=' + Q_KEY
@@ -58,6 +74,94 @@ def download_all_stocks_fast(write_csv=False):
         os.remove('../stockdata/' + z.filelist[0].filename)
 
     return df
+
+
+def download_entire_db(storage_path='/home/nate/eod_data/',
+                        remove_last=True,
+                        return_df=False):
+    """
+    downloads entire database and saves to .h5, replacing old file
+    :param storage_path: string, temporary location where to save the full csv file
+    :param remove_last: removes last instance of the EOD dataset
+    """
+    zip_file_url = 'https://www.quandl.com/api/v3/databases/EOD/data?api_key=' + Q_KEY
+    r = req.get(zip_file_url)
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    z.extractall(path=storage_path)
+    df = pd.read_csv(storage_path + \
+                    z.filelist[0].filename,
+                    names=HEADERS,
+                    index_col=1,
+                    parse_dates=True,
+                    infer_datetime_format=True)
+    latest_date = df.index.max().date().strftime('%Y%m%d')
+    df.to_hdf(storage_path + 'EOD_' + latest_date + '.h5',
+                key='data',
+                complib='blosc',
+                complevel=9)
+    if remove_last:
+        files = glob.glob(storage_path + 'EOD_*.h5')
+        latest_file = sorted(files, key=os.path.getctime)[-2]
+        os.remove(latest_file)
+
+    os.remove(storage_path + z.filelist[0].filename)
+
+    if return_df:
+        return df
+
+
+def check_market_status():
+    """
+    Checks to see if market is open today.
+    Uses the pandas_market_calendars package as mcal
+    """
+    # today = datetime.datetime.now(pytz.timezone('America/New_York')).date()
+    today_utc = pd.to_datetime('now').date()
+    ndq = mcal.get_calendar('NASDAQ')
+    open_days = ndq.schedule(start_date=today_utc - pd.Timedelta('10 days'), end_date=today_utc)
+    if today_utc in open_days.index:
+        return open_days
+    else:
+        return None
+
+
+def daily_download_entire_db(storage_path='/home/nate/eod_data/'):
+    """
+    checks if it is a trading day today, and downloads entire db after it has been updated
+    (930pm ET)
+    need to refactor -- this is messy and touchy.  Have to start before midnight UTC
+    to work ideally
+    """
+    last_scrape = None
+    if os.path.exists(storage_path + 'EOD_*.h5'):
+        files = glob.glob(storage_path + '*.h5')
+        latest_file = sorted(files, key=os.path.getctime)[-1]
+        last_scrape = pd.to_datetime(latest_file[-11:-3])
+
+    while True:
+        today_utc = pd.to_datetime('now')
+        today_ny = datetime.datetime.now(pytz.timezone('America/New_York'))
+        if last_scrape != today_ny.date():
+            open_days = check_market_status()
+            if open_days is not None:
+                close_date = open_days.loc[today_utc.date()]['market_close']
+                if today_utc.dayofyear > close_date.dayofyear or today_utc.year > close_date.year:
+                    if today_ny.hour > 10:
+                        last_scrape = today_ny.date()
+                        print('downloading db...')
+                        download_entire_db()
+                else:
+                    # need to make it wait number of hours until close
+                    print('waiting for market to close, waiting 1 hour...')
+                    time.sleep(3600)
+            else:
+                # need to wait till market will be open then closed next
+                print('market closed today, waiting 1 hour...')
+                time.sleep(3600)  # wait 1 hour
+        else:
+            # need to make this more intelligent so it waits until the next day
+            print('already scraped today, waiting 1 hour to check again...')
+            time.sleep(3600)
 
 
 def update_all_stocks(return_headers=False, update_small_file=False):
@@ -204,17 +308,51 @@ def load_one_stock_fulldf(df, make_files, filename):
     df.loc[:, 'Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d')
     df.set_index('Date', inplace=True)
     if make_files:
-        df.to_hdf(filename, key='data', comlib='blosc', complevel=9)
+        df.to_hdf(filename, key='data', comlib='blosc', complevel=9, format='table')
 
     return df
+
+
+def get_latest_eod(storage_path='/home/nate/eod_data/', return_file=False):
+    files = glob.glob(storage_path + '*.h5')
+    latest_file = sorted(files, key=os.path.getctime)[-1]
+    latest_eod = latest_file[-11:-3]
+    if return_file:
+        return latest_file
+
+    return latest_eod
+
+
+def make_small_df(storage_path='/home/nate/eod_data/',
+                filename='EOD_{}.h5',
+                latest_eod=None,
+                earliest_date='20100101'):
+    """
+    makes smaller h5 file with only data after specific time
+    only have historic data for last 2 years for shortsqueeze, so that's an example
+    :param latest_eod: string, YYYYMMDD
+    :param earliest_date: string, format YYYYmmdd, earliest date to keep in df
+    """
+    if latest_eod is None:
+        latest_eod = get_latest_eod()
+
+    eod_datapath = storage_path + filename.format(latest_eod)
+    new_filename = storage_path + filename.format(earliest_date + '_' + latest_eod)
+    full_df = pd.read_hdf(eod_datapath, names=HEADERS)
+    # hmm seemed to used to need this, not anymore
+    # full_df['Date'] = pd.to_datetime(full_df['Date'], format='%Y-%m-%d')
+    full_df = full_df[full_df.index > pd.to_datetime(earliest_date, format='%Y%m%d')]
+    full_df.to_hdf(new_filename, key='data', complib='blosc', complevel=9)
 
 
 def load_stocks(datapath=HOME_DIR + 'stockdata/',
                 stocks=['GLD', 'DUST', 'NUGT'],
                 make_files=True,
-                eod_datapath='/home/nate/eod_data/EOD_{}.h5',
-                latest_eod='20170812',
-                verbose=False):
+                eod_datapath='/home/nate/eod_data/',
+                eod_filename='EOD_{}.h5',
+                latest_eod=None,
+                verbose=False,
+                earliest_date=None):
     """
     :param datapath: string; path to stock datafiles
     :param stocks: list of strings, stock tickers (must be uppercase)
@@ -224,7 +362,14 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
 
     :returns: dictionary of dataframes with tickers as keys
     """
-    eod_datapath = eod_datapath.format(latest_eod)
+    if latest_eod is None:
+        latest_eod = get_latest_eod()
+
+    if earliest_date is None:
+        eod_datapath = eod_datapath + eod_filename.format(latest_eod)
+    else:
+        eod_datapath = eod_datapath + eod_filename.format(earliest_date + '_' + latest_eod)
+
     dfs = {}
     # load big df with everything
     headers = ['Ticker',

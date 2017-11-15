@@ -180,11 +180,13 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
         print('calculating TAs...')
         with ProcessPoolExecutor(max_workers=None) as executor:
             for s in ret_stocks:
-                r = executor.submit(cts.create_tas, dfs[s], return_df=True)
+                r = executor.submit(cts.create_tas,
+                                    dfs[s],
+                                    return_df=True,
+                                    verbose=verbose)
                 jobs.append((s, r))
 
         for s, r in jobs:
-            print(s)
             res = r.result()
             if res is not None:
                 dfs[s] = res
@@ -207,6 +209,7 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
         finra_sh_df.rename(columns={'Symbol': 'Ticker'}, inplace=True)
         fn_stocks = set(finra_sh_df['Ticker'].unique())
         fn_grp = finra_sh_df.groupby(['Ticker', 'Date']).sum()
+        jobs = []
         with ProcessPoolExecutor() as executor:
             for s in ret_stocks:
                 if s in fn_stocks:
@@ -228,9 +231,10 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
         if 'Date' not in dfs[ret_stocks[0]].columns:
             for s in ret_stocks:
                 dfs[s].reset_index(inplace=True)
-            
+
         ss_sh = sse.get_short_interest_data()
         ss_sh.rename(columns={'Symbol': 'Ticker'}, inplace=True)
+        ss_sh_grp = ss_sh.groupby('Ticker')
         sh_stocks = set(ss_sh['Ticker'].unique())
         jobs = []
         with ProcessPoolExecutor() as executor:
@@ -239,11 +243,11 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
                     r = executor.submit(make_sh_df,
                                         s,
                                         dfs[s],
-                                        ss_sh[ss_sh['Ticker'] == s])
+                                        ss_sh_grp.get_group(s),
+                                        verbose)
                     jobs.append((s, r))
 
         for s, r in jobs:
-            print(s)
             res = r.result()
             if res is not None:
                 sh_int[s] = res
@@ -265,9 +269,12 @@ def load_dfs():
     return dat['dfs'], dat['sh_int'], dat['fin_sh']
 
 
-def make_sh_df(s, df, ss_sh_df):
+def make_sh_df(s, df, ss_sh_df, verbose):
+    if verbose:
+        print(s)
+    
     new = df[df['Date'] >= ss_sh_df['Date'].min()]
-    new = new.merge(ss_sh_df, how='left', on=['Ticker', 'Date'])
+    new = new.merge(ss_sh_df, how='left', on=['Date'])
     new.ffill(inplace=True)
     new.fillna(-1, inplace=True)
     new.set_index('Date', inplace=True)

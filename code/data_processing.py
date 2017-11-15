@@ -242,8 +242,7 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
                     r = executor.submit(make_sh_df,
                                         s,
                                         dfs[s],
-                                        ss_sh_grp.get_group(s),
-                                        verbose)
+                                        ss_sh_grp.get_group(s))
                     jobs.append((s, r))
 
         for s, r in jobs:
@@ -268,7 +267,7 @@ def load_dfs():
     return dat['dfs'], dat['sh_int'], dat['fin_sh']
 
 
-def make_sh_df(s, df, ss_sh_df, verbose):
+def make_sh_df(s, df, ss_sh_df, verbose=False):
     if verbose:
         print(s)
 
@@ -305,10 +304,11 @@ def make_gain_targets(df, future=10, return_df=False):
         return df
 
 
-def make_all_sh_future(sh_int, future=10, hist_points=40):
+def make_all_sh_future(sh_int, future=10, hist_points=40, verbose=False):
     for s in sorted(sh_int.keys()):
         if '10_day_price_diff' not in sh_int[s].columns and sh_int[s].shape[0] > hist_points:
-            print(s)
+            if verbose:
+                print(s)
             make_gain_targets(sh_int[s], future=future)
 
 
@@ -510,27 +510,35 @@ if __name__ == "__main__":
     sh_int_stocks = sorted(sh_int.keys())
     future = 10
     hist_points = 40
-    make_all_sh_future(sh_int, future=future, hist_points=hist_points)
+    make_all_sh_future(sh_int, future=future, hist_points=hist_points, verbose=False)
     del dfs
     del fin_sh
     gc.collect()
 
     # make historical feats for all
     # need to do this in chunks and save it
-    # targ_col = str(future) + '_day_price_diff_pct'
-    # feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col, 'Ticker'])))
-    # all_feats, all_targs = [], []
-    # for s in sh_int_stocks:
-    #     print(s)
-    #     if sh_int[s].shape[0] > hist_points:
-    #         new_feats, new_targs, _ = create_hist_feats(sh_int[s][feat_cols].values,
-    #                                                         sh_int[s][targ_col].values,
-    #                                                         sh_int[s].index.values,
-    #                                                         hist_points=hist_points,
-    #                                                         future=future)
-    #         all_feats.append(new_feats)
-    #         all_targs.append(new_targs)
-    #         # all_dates.append(dates)
+    # break into 2 chunks
+    # uses about 16GB of memory per chunk
+    targ_col = str(future) + '_day_price_diff_pct'
+    feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col, 'Ticker'])))
+    chunks = 100
+    breakpoint = len(sh_int_stocks) // chunks
+    for i in range(chunks):
+        ch = sh_int_stocks[i*breakpoint:(i + 1) * breakpoint]
+        all_feats, all_targs = [], []
+        for s in ch:
+            print(s)
+            if sh_int[s].shape[0] > hist_points:
+                new_feats, new_targs, _ = create_hist_feats(sh_int[s][feat_cols].values,
+                                                                sh_int[s][targ_col].values,
+                                                                sh_int[s].index.values,
+                                                                hist_points=hist_points,
+                                                                future=future)
+                all_feats.append(new_feats)
+                all_targs.append(new_targs)
+                # all_dates.append(dates)
+
+        dd.io.save('ch_{}.h5'.format(i + 1), {'feats': all_feats, 'targs': all_targs, 'stocks': ch}, compression=('blosc', 9))
 
     # make giant combination of all stocks
 

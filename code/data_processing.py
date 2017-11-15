@@ -182,8 +182,7 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
             for s in ret_stocks:
                 r = executor.submit(cts.create_tas,
                                     dfs[s],
-                                    return_df=True,
-                                    verbose=verbose)
+                                    return_df=True)
                 jobs.append((s, r))
 
         for s, r in jobs:
@@ -272,7 +271,7 @@ def load_dfs():
 def make_sh_df(s, df, ss_sh_df, verbose):
     if verbose:
         print(s)
-    
+
     new = df[df['Date'] >= ss_sh_df['Date'].min()]
     new = new.merge(ss_sh_df, how='left', on=['Date'])
     new.ffill(inplace=True)
@@ -517,9 +516,10 @@ if __name__ == "__main__":
     gc.collect()
 
     # make historical feats for all
-    targ_col = str(future) + '_day_price_diff_pct'
-    feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col, 'Ticker'])))
-    all_feats, all_targs = [], []
+    # need to do this in chunks and save it
+    # targ_col = str(future) + '_day_price_diff_pct'
+    # feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col, 'Ticker'])))
+    # all_feats, all_targs = [], []
     # for s in sh_int_stocks:
     #     print(s)
     #     if sh_int[s].shape[0] > hist_points:
@@ -530,7 +530,7 @@ if __name__ == "__main__":
     #                                                         future=future)
     #         all_feats.append(new_feats)
     #         all_targs.append(new_targs)
-            # all_dates.append(dates)
+    #         # all_dates.append(dates)
 
     # make giant combination of all stocks
 

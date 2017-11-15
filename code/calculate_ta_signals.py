@@ -139,8 +139,7 @@ def get_indicator_list():
 def create_tas(bars,
                 verbose=False,
                 ohlcv_cols=['High', 'Low', 'Open', 'Close', 'Volume'],
-                return_df=False,
-                verbose=False):
+                return_df=False):
     """
     :param bars: resampled pandas dataframe with open, high, low, close, volume, and typical_price columns
     :param verbose: boolean, if true, prints more debug

@@ -305,11 +305,13 @@ def load_one_stock_hdf(filename):
     return df
 
 
-def load_one_stock_fulldf(df, make_files, filename):
-    df.loc[:, 'Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d')
-    df.set_index('Date', inplace=True)
+def load_one_stock_fulldf(full_df, s, make_files, filename):
+    # don't think I need that stuff anymore
+    df = full_df[full_df['Ticker'] == s]
+    # df.loc[:, 'Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d')
+    # df.set_index('Date', inplace=True)
     if make_files:
-        df.to_hdf(filename, key='data', comlib='blosc', complevel=9, format='table')
+        df.to_hdf(filename, key='data', comlib='blosc', complevel=9)
 
     return df
 
@@ -327,7 +329,7 @@ def get_latest_eod(storage_path='/home/nate/eod_data/', return_file=False):
 def make_small_df(storage_path='/home/nate/eod_data/',
                 filename='EOD_{}.h5',
                 latest_eod=None,
-                earliest_date='20100101'):
+                earliest_date='20150101'):
     """
     makes smaller h5 file with only data after specific time
     only have historic data for last 2 years for shortsqueeze, so that's an example
@@ -348,7 +350,7 @@ def make_small_df(storage_path='/home/nate/eod_data/',
 
 def load_stocks(datapath=HOME_DIR + 'stockdata/',
                 stocks=['GLD', 'DUST', 'NUGT'],
-                make_files=True,
+                make_files=False,
                 eod_datapath='/home/nate/eod_data/',
                 eod_filename='EOD_{}.h5',
                 latest_eod=None,
@@ -375,36 +377,41 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
     # load big df with everything
     full_df = pd.read_hdf(eod_datapath, names=HEADERS)
     tickers = set(full_df['Ticker'])
-    jobs = []
-    with ProcessPoolExecutor() as executor:
-        for s in stocks:
-            if s in tickers:
-                filename = datapath + s + '_{}.h5'.format(latest_eod)
-                if os.path.exists(filename):
-                    r = executor.submit(load_one_stock_hdf, filename)
-                    jobs.append((s, r))
-                else:
-                    if verbose:
-                        print('loading', s)
-                    df = full_df[full_df['Ticker'] == s]
-                    r = executor.submit(load_one_stock_fulldf,
-                                        df,
-                                        make_files,
-                                        filename)
-            else:
-                if verbose:
-                    print(s, 'not in tickers')
-                continue
-
-    for s, r in jobs:
-        res = r.result()
-        if res is not None:
-            dfs[s] = res
-        else:
-            print('result was None for', s)
-
-    del jobs
-    gc.collect()
+    stk_grps = full_df.groupby(by='Ticker')
+    for t in tickers:
+        dfs[t] = stk_grps.get_group(t)
+        
+    # was doing this before but I think I don't have to...
+    # jobs = []
+    # with ProcessPoolExecutor() as executor:
+    #     for s in stocks:
+    #         if s in tickers:
+    #             filename = datapath + s + '_{}.h5'.format(latest_eod)
+    #             if os.path.exists(filename):
+    #                 r = executor.submit(load_one_stock_hdf, filename)
+    #                 jobs.append((s, r))
+    #             else:
+    #                 if verbose:
+    #                     print('loading', s)
+    #                 r = executor.submit(load_one_stock_fulldf,
+    #                                     full_df,
+    #                                     s,
+    #                                     make_files,
+    #                                     filename)
+    #         else:
+    #             if verbose:
+    #                 print(s, 'not in tickers')
+    #             continue
+    #
+    # for s, r in jobs:
+    #     res = r.result()
+    #     if res is not None:
+    #         dfs[s] = res
+    #     else:
+    #         print('result was None for', s)
+    #
+    # del jobs
+    # gc.collect()
 
     if len(dfs) == 0:
         print('WARNING: no stocks were in the data, returning None')

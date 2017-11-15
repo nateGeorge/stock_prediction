@@ -158,7 +158,7 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
                 finra_shorts=True,
                 short_interest=True,
                 verbose=False,
-                earliest_date='20100101'):
+                earliest_date='20150101'):
     """
     :param stocks: list of strings; tickers (must be caps)
     :param TAs: boolean, if true, calculates technical indicators
@@ -183,25 +183,25 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
                 r = executor.submit(cts.create_tas, dfs[s], return_df=True)
                 jobs.append((s, r))
 
-    for s, r in jobs:
-        print(s)
-        res = r.result()
-        if res is not None:
-            dfs[s] = res
-        else:
-            print('result is None for', s)
+        for s, r in jobs:
+            print(s)
+            res = r.result()
+            if res is not None:
+                dfs[s] = res
+            else:
+                print('result is None for', s)
 
-    del jobs
-    gc.collect()
-
-    for s in ret_stocks:
-        dfs[s].reset_index(inplace=True)
+        del jobs
+        gc.collect()
 
     sh_int = {}
     fin_sh = {}
     # not sure if processpool helping here at all...maybe even want to do
     # thread pool, or just loop it
     if finra_shorts:
+        for s in ret_stocks:
+            dfs[s].reset_index(inplace=True)
+
         print('getting finra shorts and merging...')
         finra_sh_df = sfs.load_all_data()
         finra_sh_df.rename(columns={'Symbol': 'Ticker'}, inplace=True)
@@ -225,6 +225,10 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
 
     if short_interest:
         print('getting short interest and merging...')
+        if 'Date' not in dfs[ret_stocks[0]].columns:
+            for s in ret_stocks:
+                dfs[s].reset_index(inplace=True)
+            
         ss_sh = sse.get_short_interest_data()
         ss_sh.rename(columns={'Symbol': 'Ticker'}, inplace=True)
         sh_stocks = set(ss_sh['Ticker'].unique())

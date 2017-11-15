@@ -6,6 +6,7 @@ import time
 import zipfile
 import datetime
 import glob
+import gc
 
 # installed
 import quandl
@@ -372,24 +373,10 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
 
     dfs = {}
     # load big df with everything
-    headers = ['Ticker',
-               'Date',
-               'Open',
-               'High',
-               'Low',
-               'Close',
-               'Volume',
-               'Dividend',
-               'Split',
-               'Adj_Open',
-               'Adj_High',
-               'Adj_Low',
-               'Adj_Close',
-               'Adj_Volume']
-    full_df = pd.read_hdf(eod_datapath, names=headers)
+    full_df = pd.read_hdf(eod_datapath, names=HEADERS)
     tickers = set(full_df['Ticker'])
     jobs = []
-    with ProcessPoolExecutor(max_workers=None) as executor:
+    with ProcessPoolExecutor() as executor:
         for s in stocks:
             if s in tickers:
                 filename = datapath + s + '_{}.h5'.format(latest_eod)
@@ -415,6 +402,9 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
             dfs[s] = res
         else:
             print('result was None for', s)
+
+    del jobs
+    gc.collect()
 
     if len(dfs) == 0:
         print('WARNING: no stocks were in the data, returning None')

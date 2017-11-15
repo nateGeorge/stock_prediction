@@ -496,7 +496,7 @@ def prep_nn_data(df,
 
 if __name__ == "__main__":
     short_stocks = sse.get_stocks()
-    dfs, sh_int, fin_sh = load_stocks(stocks=short_stocks)
+    dfs, sh_int, fin_sh = load_stocks(stocks=short_stocks, verbose=True)
     sh_int_stocks = sorted(sh_int.keys())
     future = 10
     hist_points = 40

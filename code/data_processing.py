@@ -11,6 +11,7 @@ import pandas as pd
 import deepdish as dd
 import matplotlib.pyplot as plt
 from concurrent.futures import ProcessPoolExecutor
+import h5py
 
 # custom
 import dl_quandl_EOD as dlq
@@ -273,6 +274,8 @@ def make_sh_df(s, df, ss_sh_df, verbose=False):
 
     new = df[df['Date'] >= ss_sh_df['Date'].min()]
     new = new.merge(ss_sh_df, how='left', on=['Date'])
+    # two ticker columns after the merge, we don't need them
+    new.drop(['Ticker_x', 'Ticker_y'], axis=1, inplace=True)
     new.ffill(inplace=True)
     new.fillna(-1, inplace=True)
     new.set_index('Date', inplace=True)
@@ -328,8 +331,9 @@ def create_hist_feats(features, targets, dates, hist_points=40, future=10, make_
         return new_feats[:-future], targets, new_feats[-future:]
     else:
         new_targs = targets[hist_points + future:]
+        hist_dates = dates[hist_points:stop] # dates for last of historical points
         dates = dates[hist_points + future:]  # dates for the targets
-        return new_feats, new_targs, dates
+        return new_feats, new_targs, dates, hist_dates
 
 
 
@@ -504,6 +508,86 @@ def prep_nn_data(df,
     return train_feats, test_feats, train_targs, test_targs, dates
 
 
+def look_at_ss_rank_plot():
+    # make giant combination of all stocks and look at correlation between shortsqueeze rating 10 days and price change 10 days later
+    # no correlation, but this isn't super helpful, because it should be the
+    # ranking on the day new data comes out vs the price change 10 days later.
+    sh_int['A'].columns.tolist().index('Short Squeeze Ranking')  # 145
+    all_feats, all_targs = [], []
+    for s in sh_int_stocks:
+        if sh_int[s].shape[0] > hist_points:  # make_all_sh_future did this too
+            # print(s)
+            new_feats, new_targs, _, _ = create_hist_feats(sh_int[s]['Short Squeeze Ranking'].values.reshape(-1, 1),
+                                                            sh_int[s][targ_col].values,
+                                                            sh_int[s].index.values,
+                                                            hist_points=1,
+                                                            future=10)
+            all_feats.append(new_feats)
+            all_targs.append(new_targs)
+
+    all_feats_np = np.concatenate(all_feats).flatten()
+    all_targs_np = np.concatenate(all_targs).flatten()
+
+    # no correlation, but this isn't super helpful, because it should be the
+    # ranking on the day new data comes out vs the price change 10 days later.
+    trace = Scattergl(
+    x = all_feats_np,
+    y = all_targs_np,
+    mode = 'markers',
+    marker = dict(
+        color = '#FFBAD2',
+        line = dict(width = 1)
+        )
+    )
+    data = [trace]
+    plot(data, filename='webgl')
+
+
+def check_targets():
+    # make sure targets were made correctly
+    # still not 100% double checked that targets are correct
+    # but future % change is calculated correct
+    from plotly import tools
+    from plotly.graph_objs import Scatter, Figure, Scattergl
+    from plotly.offline import plot
+    trace1 = Scatter(
+    x=sh_int['A'].index,
+    y=sh_int['A']['typical_price']
+    )
+    trace2 = Scatter(
+        x=sh_int['A'].index,
+        y=sh_int['A']['10_day_price_diff_pct'],
+    )
+
+    targ_col = str(future) + '_day_price_diff_pct'
+    feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col])))
+    a_feats, a_targs, a_dates, a_h_dates = create_hist_feats(sh_int['A'][feat_cols].values,
+                                                    sh_int['A'][targ_col].values,
+                                                    sh_int['A'].index.values,
+                                                    hist_points=hist_points,
+                                                    future=future)
+    trace3 = Scatter(
+        x=a_dates,
+        y=a_targs,
+    )
+
+    trace1b = Scatter(
+        x=a_h_dates,
+        y=a_feats[:, -1, 12],  # typical price column
+    )
+
+    fig = tools.make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.001)
+
+    fig.append_trace(trace1, 1, 1)
+    fig.append_trace(trace1b, 2, 1)
+    # fig.append_trace(trace2, 2, 1)
+    fig.append_trace(trace3, 3, 1)
+
+    fig['layout'].update(height=1500, width=1500)
+    plot(fig, filename='simple-subplot')
+
+
+
 if __name__ == "__main__":
     short_stocks = sse.get_stocks()
     dfs, sh_int, fin_sh = load_stocks(stocks=short_stocks, verbose=True)
@@ -511,17 +595,25 @@ if __name__ == "__main__":
     future = 10
     hist_points = 40
     make_all_sh_future(sh_int, future=future, hist_points=hist_points, verbose=False)
-    del dfs
-    del fin_sh
+    # del dfs
+    # del fin_sh
     gc.collect()
+
+
+    # needed this one time to make plots...not sure if needed again
+    # for s in sh_int_stocks:
+    #     sh_int[s]['Date'] = pd.to_datetime(sh_int[s]['Date'])
+    #     sh_int[s].set_index('Date', inplace=True)
+
+
 
     # make historical feats for all
     # need to do this in chunks and save it
     # break into 2 chunks
     # uses about 16GB of memory per chunk
     targ_col = str(future) + '_day_price_diff_pct'
-    feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col, 'Ticker'])))
-    chunks = 100
+    feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col])))
+    chunks = 10
     breakpoint = len(sh_int_stocks) // chunks
     for i in range(chunks):
         ch = sh_int_stocks[i*breakpoint:(i + 1) * breakpoint]
@@ -538,9 +630,20 @@ if __name__ == "__main__":
                 all_targs.append(new_targs)
                 # all_dates.append(dates)
 
-        dd.io.save('ch_{}.h5'.format(i + 1), {'feats': all_feats, 'targs': all_targs, 'stocks': ch}, compression=('blosc', 9))
+        f = h5py.File('ch_' + str(i) + '.h5')
+        f.create_dataset('new_feats', data=new_feats, compression='lzf')
+        f.create_dataset('new_targs', data=new_targs, compression='lzf')
+        f.close()
+        df = pd.DataFrame({'Tickers': ch})
+        df.to_hdf('ch_' + str(i) + 'stocks.h5', key='data', complib='blosc', complevel=9)
+        del df
+        gc.collect()
+        # didn't work...error about converting to int and too large
+        # dd.io.save('ch_{}.h5'.format(i + 1), {'feats': all_feats, 'targs': all_targs, 'stocks': ch}, compression=('blosc', 9))
 
-    # make giant combination of all stocks
+
+
+
 
 
     # EDA('CVGW', dfs, sh_int, fin_sh)

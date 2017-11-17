@@ -4,6 +4,8 @@ for loading and processing stockdata
 # core
 import sys
 import gc
+import os
+import math
 
 # installed
 import numpy as np
@@ -336,7 +338,6 @@ def create_hist_feats(features, targets, dates, hist_points=40, future=10, make_
         return new_feats, new_targs, dates, hist_dates
 
 
-
 def EDA(s=None, dfs=None, sh_int=None, fin_sh=None):
     # just encapsulating the first EDA on exas and navi
     return_none = False
@@ -587,11 +588,99 @@ def check_targets():
     plot(fig, filename='simple-subplot')
 
 
+def make_nn_data(sh_int, hist_points=40, future=10, test_frac=0.15, make_fresh=False, verbose=False):
+    # make historical feats for all
+    # need to do this in chunks and save it
+    # break into 2 chunks
+    # uses about 16GB of memory per chunk
+    sh_int_stocks = sorted(sh_int.keys())
+    targ_col = str(future) + '_day_price_diff_pct'
+    feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col])))
+    chunks = 10
+    breakpoint = len(sh_int_stocks) // chunks
+    for i in range(chunks):
+        filename = 'ch_' + str(i) + '.h5'
+        if make_fresh and os.path.exists(filename):
+            os.remove(filename)
+
+        ch = sh_int_stocks[i*breakpoint:(i + 1) * breakpoint]
+        all_tr_feats, all_tr_targs, all_te_feats, all_te_targs = [], [], [], []
+        tr_indices, te_indices = [], []
+        # indices where stocks start/end in big dataset, in case want to look at
+        # individual stocks later
+        st_tr, st_te, end_tr, end_te = 0, 0, 0, 0
+        for s in ch:
+            if verbose:
+                print(s)
+
+            # first make sure we have enough data to make the feats/targs
+            if sh_int[s].shape[0] > math.ceil((hist_points + future) / test_frac) + 5:
+                new_feats, new_targs, _, _ = create_hist_feats(sh_int[s][feat_cols].values,
+                                                                sh_int[s][targ_col].values,
+                                                                sh_int[s].index.values,
+                                                                hist_points=hist_points,
+                                                                future=future)
+                tr_idx = int(round((1 - test_frac) * new_feats.shape[0]))
+                all_tr_feats.append(new_feats[:tr_idx, :, :])
+                all_tr_targs.append(new_targs[:tr_idx])
+                all_te_feats.append(new_feats[tr_idx:, :, :])
+                all_te_targs.append(new_targs[tr_idx:])
+                # keeps track of the indices for
+                end_tr = tr_idx
+                end_te = new_feats.shape[0] - tr_idx
+                tr_indices.append([st_tr, end_tr])
+                te_indices.append([st_te, end_te])
+                st_tr += end_tr
+                st_te += end_te
+                # all_dates.append(dates)
+
+        tr_feats = np.concatenate(all_tr_feats)
+        tr_targs = np.concatenate(all_tr_targs)
+        te_feats = np.concatenate(all_te_feats)
+        te_targs = np.concatenate(all_te_targs)
+        tr_sizes = np.array(tr_indices)
+        te_sizes = np.array(te_indices)
+
+        f = h5py.File(filename)
+        f.create_dataset('tr_feats', data=tr_feats, compression='lzf')
+        f.create_dataset('tr_targs', data=tr_targs, compression='lzf')
+        f.create_dataset('te_feats', data=te_feats, compression='lzf')
+        f.create_dataset('te_targs', data=te_targs, compression='lzf')
+        f.create_dataset('tr_indices', data=tr_indices, compression='lzf')
+        f.create_dataset('te_indices', data=te_indices, compression='lzf')
+        f.close()
+
+        # make list of tickers
+        df = pd.DataFrame({'Tickers': ch})
+        df.to_hdf('ch_' + str(i) + 'stocks.h5',
+                    key='data',
+                    complib='blosc',
+                    complevel=9)
+        # save memory
+        del df
+        gc.collect()
+        # didn't work...error about converting to int and too large
+        # dd.io.save('ch_{}.h5'.format(i + 1), {'feats': all_feats, 'targs': all_targs, 'stocks': ch}, compression=('blosc', 9))
+
+
+def load_nn_data_one_set(i=0):
+    # loads just one set of neural net training data out of 10. 'i' specifies which set
+    f = h5py.File('ch_' + str(i) + '.h5')
+    tr_feats = f['tr_feats'][:]
+    tr_targs = f['tr_targs'][:]
+    te_feats = f['te_feats'][:]
+    te_targs = f['te_targs'][:]
+    tr_indices = f['tr_indices'][:]
+    te_indices = f['te_indices'][:]
+    f.close()
+    stocks = pd.read_hdf('ch_' + str(i) + 'stocks.h5')
+    stocks = stocks['Tickers'].values
+    return tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks
+
 
 if __name__ == "__main__":
     short_stocks = sse.get_stocks()
     dfs, sh_int, fin_sh = load_stocks(stocks=short_stocks, verbose=True)
-    sh_int_stocks = sorted(sh_int.keys())
     future = 10
     hist_points = 40
     make_all_sh_future(sh_int, future=future, hist_points=hist_points, verbose=False)
@@ -599,6 +688,9 @@ if __name__ == "__main__":
     # del fin_sh
     gc.collect()
 
+    make_nn_data(sh_int, make_fresh=True)
+
+    tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks = load_nn_data_one_set()
 
     # needed this one time to make plots...not sure if needed again
     # for s in sh_int_stocks:
@@ -606,40 +698,7 @@ if __name__ == "__main__":
     #     sh_int[s].set_index('Date', inplace=True)
 
 
-
-    # make historical feats for all
-    # need to do this in chunks and save it
-    # break into 2 chunks
-    # uses about 16GB of memory per chunk
-    targ_col = str(future) + '_day_price_diff_pct'
-    feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col])))
-    chunks = 10
-    breakpoint = len(sh_int_stocks) // chunks
-    for i in range(chunks):
-        ch = sh_int_stocks[i*breakpoint:(i + 1) * breakpoint]
-        all_feats, all_targs = [], []
-        for s in ch:
-            print(s)
-            if sh_int[s].shape[0] > hist_points:
-                new_feats, new_targs, _ = create_hist_feats(sh_int[s][feat_cols].values,
-                                                                sh_int[s][targ_col].values,
-                                                                sh_int[s].index.values,
-                                                                hist_points=hist_points,
-                                                                future=future)
-                all_feats.append(new_feats)
-                all_targs.append(new_targs)
-                # all_dates.append(dates)
-
-        f = h5py.File('ch_' + str(i) + '.h5')
-        f.create_dataset('new_feats', data=new_feats, compression='lzf')
-        f.create_dataset('new_targs', data=new_targs, compression='lzf')
-        f.close()
-        df = pd.DataFrame({'Tickers': ch})
-        df.to_hdf('ch_' + str(i) + 'stocks.h5', key='data', complib='blosc', complevel=9)
-        del df
-        gc.collect()
-        # didn't work...error about converting to int and too large
-        # dd.io.save('ch_{}.h5'.format(i + 1), {'feats': all_feats, 'targs': all_targs, 'stocks': ch}, compression=('blosc', 9))
+    # test out neural net
 
 
 

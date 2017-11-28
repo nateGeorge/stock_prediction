@@ -98,7 +98,6 @@ def big_dense(train_feats):
 
 def smaller_conv1(train_feats):
     """
-    creates big convolutional model
     """
     # restart keras session (clear weights)
     K.clear_session()
@@ -145,9 +144,61 @@ def smaller_conv1(train_feats):
     return mod
 
 
+def deeper_conv1(train_feats):
+    """
+    """
+    # restart keras session (clear weights)
+    K.clear_session()
+    tf.reset_default_graph()
+
+    timesteps = train_feats.shape[1]
+    input_dim = train_feats.shape[2]
+    inputs = Input(shape=(timesteps, input_dim))
+    x = Conv1D(filters=32, kernel_size=5, strides=1, kernel_initializer='glorot_normal')(inputs)
+    x = BatchNormalization()(x)
+    x = MaxPooling1D()(x) # 2 x 2 : kernel x strides
+    x = Activation('elu')(x)
+
+    x = Conv1D(filters=64, kernel_size=5, strides=1, kernel_initializer='glorot_normal')(x)
+    x = BatchNormalization()(x)
+    x = MaxPooling1D()(x) # 2 x 2 : kernel x strides
+    x = Activation('elu')(x)
+
+    x = Conv1D(filters=128, kernel_size=5, strides=1, kernel_initializer='glorot_normal')(x)
+    x = BatchNormalization()(x)
+    x = MaxPooling1D()(x) # 2 x 2 : kernel x strides
+    x = Activation('elu')(x)
+
+    x = Flatten()(x)
+    x = Dense(5000, activation='elu')(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.2)(x)
+    x = Dense(3000, activation='elu')(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.2)(x)
+    x = Dense(2000, activation='elu')(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.2)(x)
+    x = Dense(1000, activation='elu')(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.5)(x)
+    x = Dense(500, activation='elu')(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.3)(x)
+    x = Dense(100, activation='elu')(x)
+    x = BatchNormalization()(x)
+    output = Dense(1, activation='linear')(x)
+
+    mod = Model(inputs, output)
+    mod.compile(optimizer='adam', loss=stock_loss_mae_log)
+
+    return mod
+
+
 def big_conv1(train_feats):
     """
     creates big convolutional model
+    requires more history
     """
     # restart keras session (clear weights)
     K.clear_session()
@@ -243,25 +294,72 @@ def get_model_memory_usage(batch_size, model):
     return gbytes
 
 
-def train_net(tr_feats,
-                tr_targs,
-                te_feats,
-                te_targs,
+def generator_one_of_10(model, batch_size):
+    """
+    loads one of the 10 files of historical data for training
+    """
+    while True:
+        # load data
+        # for now, pick random file of 10 to load from
+        i = np.random.choice(10)
+        tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks = dp.load_nn_data_one_set(i=i)
+        # flatten data if dense model
+        if model in ['big_dense']:
+            train = tr_feats.reshape(tr_feats.shape[0], -1)
+            test = te_feats.reshape(te_feats.shape[0], -1)
+        elif model in ['big_conv1',
+                        'conv1d_lstm',
+                        'big_lstm_conv',
+                        'smaller_conv1',
+                        'conv1d_lstm_small',
+                        'deeper_conv1']:
+            train = tr_feats
+            test = te_feats
+
+        # shuffle data
+        train_size = tr_feats.shape[0]
+        idxs = np.arange(train_size)
+        np.random.shuffle(idxs)
+        train = train[idxs]
+        tr_targs = tr_targs[idxs]
+
+        # feed data in batches
+        data_left = True
+        start = 0
+        end = batch_size
+        while data_left:
+            if end > train_size:
+                end = train_size
+                data_left = False
+
+            tr_batch = train[start:end]
+            tr_t_batch = tr_targs[start:end]
+            start += batch_size
+            end += batch_size
+            yield tr_batch, tr_t_batch
+
+
+def train_net(tr_feats=None,
+                tr_targs=None,
+                te_feats=None,
+                te_targs=None,
                 model='big_dense',
                 random_init=False,
                 latest_bias=False,
                 folder=None,
                 val_frac=0.15,
-                batch_size=2000):
+                batch_size=2000,
+                generator=False):
 
-    if latest_bias:
-        val_size = int(val_frac * train_targs.shape[0])
-        train_eval = np.copy(xform_train)  # save original for evaluation
-        train_eval_targs = np.copy(train_targs)
-        start = -(test_size + val_size)
-        for i in range(bias_factor):
-            xform_train = np.vstack((xform_train, xform_train[start:-val_size, :, :]))
-            train_targs = np.hstack((train_targs, train_targs[start:-val_size]))
+    if not generator:
+        if latest_bias:
+            val_size = int(val_frac * train_targs.shape[0])
+            train_eval = np.copy(xform_train)  # save original for evaluation
+            train_eval_targs = np.copy(train_targs)
+            start = -(test_size + val_size)
+            for i in range(bias_factor):
+                xform_train = np.vstack((xform_train, xform_train[start:-val_size, :, :]))
+                train_targs = np.hstack((train_targs, train_targs[start:-val_size]))
 
     if random_init:
         latest_mod = None
@@ -279,7 +377,12 @@ def train_net(tr_feats,
         if latest_bias:
             train_eval = train_eval.reshape(train_eval.shape[0], -1)
         test = te_feats.reshape(te_feats.shape[0], -1)
-    elif model in ['big_conv1', 'conv1d_lstm', 'big_lstm_conv', 'smaller_conv1', 'conv1d_lstm_small']:
+    elif model in ['big_conv1',
+                    'conv1d_lstm',
+                    'big_lstm_conv',
+                    'smaller_conv1',
+                    'conv1d_lstm_small',
+                    'deeper_conv1']:
         train = tr_feats
         test = te_feats
 
@@ -289,12 +392,17 @@ def train_net(tr_feats,
     mem_use = get_model_memory_usage(batch_size, mod)
     print('expected memory usage:', mem_use)
 
-    history = mod.fit(train,
-                tr_targs,
-                epochs=200,
-                validation_split=val_frac,
-                callbacks=cb,
-                batch_size=batch_size)
+    if generator:
+        history = mod.fit_generator(generator_one_of_10(model=model, batch_size=batch_size),
+                                    steps_per_epoch=1250,  # about 250K samples x10 for the future=10 hist=40 dataset, so about 2.5M total.  divide by 2k to get
+                                    epochs=200)
+    else:
+        history = mod.fit(train,
+                    tr_targs,
+                    epochs=200,
+                    validation_split=val_frac,
+                    callbacks=cb,
+                    batch_size=batch_size)
 
     model_file = get_model_path(base=model, folder=folder)
     print('saving as', model_file)
@@ -407,7 +515,7 @@ def plot_results(mod, tr_feats, tr_targs, te_feats=None, te_targs=None, folder=N
 
 def get_best_thresh(mod, tr_feats, tr_targs, te_feats=None, te_targs=None, cln=True, verbose=False):
     # want to use both train and test sets, but want to plot each separately
-    if test is not None:
+    if te_feats is not None:
         train = np.vstack((tr_feats, te_feats))
         train_targs = np.hstack((tr_targs, te_targs))
         xform_test, test_targs = None, None
@@ -431,7 +539,7 @@ def get_best_thresh(mod, tr_feats, tr_targs, te_feats=None, te_targs=None, cln=T
         hi -= 0.005
         lo = round_to_005(lo)
         hi = round_to_005(hi)
-        filtered = train_targs[mask]
+        filtered = tr_targs[mask]
         if filtered.shape[0] == 0:
             continue
 
@@ -464,8 +572,27 @@ def get_best_thresh_linear_model(mod, te_feats, test_targs):
     return best, lin_model.fittedvalues
 
 
+def round_to_005(x):
+    """
+    rounds to nearest 0.005 and makes it pretty (avoids floating point 0.000001 nonsense)
+    """
+    res = round(x * 200) / 200
+    return float('%.3f'%res)
+
+
 if __name__ == "__main__":
-    tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks = dp.load_nn_data_one_set()
+    import short_squeeze_eda as sse
+    short_stocks = sse.get_stocks()
+    dfs, sh_int, fin_sh = dp.load_stocks(stocks=short_stocks, verbose=True)
+    future = 10
+    hist_points = 40
+    dp.make_all_sh_future(sh_int, future=future, hist_points=hist_points, verbose=False)
+    # del dfs
+    # del fin_sh
+    gc.collect()
+
+    dp.make_nn_data(sh_int, hist_points=hist_points, future=future, make_fresh=True)
+    tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks = dp.load_nn_data_one_set(i=9)
     # train_net(tr_feats, tr_targs, te_feats, te_targs)
 
     # used to finish up train_net when wasn't done yet
@@ -478,5 +605,8 @@ if __name__ == "__main__":
     # best_99pct = get_best_thresh(mod, train=tr_feats.shape[0], -1), train_targs=train_targs, te_feats=te_feats.reshape(te_feats.shape[0], -1), test_targs=test_targs, cln=False)
 
 
-    # train_net(tr_feats, tr_targs, te_feats, te_targs, model='smaller_conv1')
-    train_net(tr_feats, tr_targs, te_feats, te_targs, model='big_conv1')
+    train_net(tr_feats, tr_targs, te_feats, te_targs, model='deeper_conv1', generator=True)
+
+    dp.make_nn_data(sh_int, hist_points=hist_points, future=5, make_fresh=True)
+
+    # train_net(tr_feats, tr_targs, te_feats, te_targs, model='big_conv1')  # wont work with 40 history points

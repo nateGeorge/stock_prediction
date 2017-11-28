@@ -14,6 +14,8 @@ import deepdish as dd
 import matplotlib.pyplot as plt
 from concurrent.futures import ProcessPoolExecutor
 import h5py
+from tqdm import tqdm
+from sklearn.preprocessing import StandardScaler as SS
 
 # custom
 import dl_quandl_EOD as dlq
@@ -598,12 +600,21 @@ def make_nn_data(sh_int, hist_points=40, future=10, test_frac=0.15, make_fresh=F
     feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col])))
     chunks = 10
     breakpoint = len(sh_int_stocks) // chunks
+    fname = 'hist=' + str(hist_points) + 'fut=' + str(future) + 'testfrac=' + str(test_frac) + '/'
+    if not os.path.exists(fname):
+        os.mkdir(fname)
+
     for i in range(chunks):
-        filename = 'ch_' + str(i) + '.h5'
+        filename = fname + 'ch_' + str(i) + '.h5'
         if make_fresh and os.path.exists(filename):
             os.remove(filename)
 
-        ch = sh_int_stocks[i*breakpoint:(i + 1) * breakpoint]
+        start = i * breakpoint
+        end = (i + 1) * breakpoint
+        if i == chunks - 1:  # last chunk
+            end = -1
+
+        ch = sh_int_stocks[start:end]
         all_tr_feats, all_tr_targs, all_te_feats, all_te_targs = [], [], [], []
         tr_indices, te_indices = [], []
         # indices where stocks start/end in big dataset, in case want to look at
@@ -641,6 +652,13 @@ def make_nn_data(sh_int, hist_points=40, future=10, test_frac=0.15, make_fresh=F
         tr_sizes = np.array(tr_indices)
         te_sizes = np.array(te_indices)
 
+        # z-scaling
+        scale_historical_feats(tr_feats)
+        scale_historical_feats(te_feats)
+
+        if make_fresh:
+            os.remove(filename)
+
         f = h5py.File(filename)
         f.create_dataset('tr_feats', data=tr_feats, compression='lzf')
         f.create_dataset('tr_targs', data=tr_targs, compression='lzf')
@@ -652,7 +670,7 @@ def make_nn_data(sh_int, hist_points=40, future=10, test_frac=0.15, make_fresh=F
 
         # make list of tickers
         df = pd.DataFrame({'Tickers': ch})
-        df.to_hdf('ch_' + str(i) + 'stocks.h5',
+        df.to_hdf(fname + 'ch_' + str(i) + 'stocks.h5',
                     key='data',
                     complib='blosc',
                     complevel=9)
@@ -663,9 +681,43 @@ def make_nn_data(sh_int, hist_points=40, future=10, test_frac=0.15, make_fresh=F
         # dd.io.save('ch_{}.h5'.format(i + 1), {'feats': all_feats, 'targs': all_targs, 'stocks': ch}, compression=('blosc', 9))
 
 
-def load_nn_data_one_set(i=0):
+def scale_historical_feats(feats, multiproc=False):
+    # TODO: multithread so it runs faster
+    if multiproc:
+        cores = os.cpu_count()
+
+        chunksize = feats.shape[0] // (cores)
+        chunks = np.split(feats[:chunksize * (cores - 1), :, :], cores - 1)
+        print(len(chunks))
+        print(feats[np.newaxis, chunksize * (cores - 1):, :, :].shape)
+        print(chunks[0].shape)
+        # chunks = np.concatenate([chunks, feats[np.newaxis, chunksize * (cores - 1):, :, :]])
+
+        pool = Pool()
+        pool.map(scale_it, chunks + [feats[np.newaxis, chunksize * (cores - 1):, :, :]])
+        pool.close()
+        pool.join()
+    else:
+        scale_it(feats)
+
+
+def scale_it(dat, tq=True):
+    sh0, sh2 = dat.shape[0], dat.shape[2]
+    s = SS(copy=False)  # copy=False does the scaling inplace, so we don't have to make a new list
+    if tq:
+        it = tqdm(range(sh0))
+    else:
+        it = range(sh0)
+    for j in it:  # timesteps
+        for i in range(sh2):  # number of indicators/etc
+            _ = s.fit_transform(dat[j, :, i].reshape(-1, 1))[:, 0]
+
+
+def load_nn_data_one_set(i=0, hist_points=40, future=10, test_frac=0.15):
     # loads just one set of neural net training data out of 10. 'i' specifies which set
-    f = h5py.File('ch_' + str(i) + '.h5')
+    # first get folder name
+    fname = 'hist=' + str(hist_points) + 'fut=' + str(future) + 'test_frac=' + str(test_frac) + '/'
+    f = h5py.File(fname + 'ch_' + str(i) + '.h5')
     tr_feats = f['tr_feats'][:]
     tr_targs = f['tr_targs'][:]
     te_feats = f['te_feats'][:]
@@ -673,7 +725,7 @@ def load_nn_data_one_set(i=0):
     tr_indices = f['tr_indices'][:]
     te_indices = f['te_indices'][:]
     f.close()
-    stocks = pd.read_hdf('ch_' + str(i) + 'stocks.h5')
+    stocks = pd.read_hdf(fname + 'ch_' + str(i) + 'stocks.h5')
     stocks = stocks['Tickers'].values
     return tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks
 
@@ -688,9 +740,9 @@ if __name__ == "__main__":
     # del fin_sh
     gc.collect()
 
-    make_nn_data(sh_int, make_fresh=True)
+    make_nn_data(sh_int, hist_points=hist_points, future=future, make_fresh=True)
 
-    tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks = load_nn_data_one_set()
+    tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks = load_nn_data_one_set(i=0, hist_points=hist_points, future=future)
 
     # needed this one time to make plots...not sure if needed again
     # for s in sh_int_stocks:

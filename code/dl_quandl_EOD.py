@@ -20,6 +20,8 @@ import pytz
 # custom
 from utils import get_home_dir
 
+
+DEFAULT_STORAGE = '/home/nate/eod_data/'
 # get todays date for checking if files up-to-date
 MTN = timezone('America/Denver')
 TODAY = datetime.datetime.now(MTN)
@@ -77,14 +79,16 @@ def download_all_stocks_fast_csv(write_csv=False):
     return df
 
 
-def download_entire_db(storage_path='/home/nate/eod_data/',
+def download_entire_db(storage_path=DEFAULT_STORAGE,
                         remove_last=True,
-                        return_df=False):
+                        return_df=False,
+                        return_latest_date=False):
     """
     downloads entire database and saves to .h5, replacing old file
     :param storage_path: string, temporary location where to save the full csv file
     :param remove_last: removes last instance of the EOD dataset
     """
+    # first check if we have the latest data
     zip_file_url = 'https://www.quandl.com/api/v3/databases/EOD/data?api_key=' + Q_KEY
     r = req.get(zip_file_url)
     z = zipfile.ZipFile(io.BytesIO(r.content))
@@ -109,6 +113,8 @@ def download_entire_db(storage_path='/home/nate/eod_data/',
 
     if return_df:
         return df
+    elif return_latest_date:
+        return pd.to_datetime(df.index.max().date())
 
 
 def check_market_status():
@@ -126,44 +132,93 @@ def check_market_status():
         return None
 
 
-def daily_download_entire_db(storage_path='/home/nate/eod_data/'):
+def daily_download_entire_db(storage_path=DEFAULT_STORAGE):
     """
     checks if it is a trading day today, and downloads entire db after it has been updated
     (930pm ET)
     need to refactor -- this is messy and touchy.  Have to start before midnight UTC
     to work ideally
     """
-    last_scrape = None
-    if os.path.exists(storage_path + 'EOD_*.h5'):
-        files = glob.glob(storage_path + '*.h5')
-        latest_file = sorted(files, key=os.path.getctime)[-1]
-        last_scrape = pd.to_datetime(latest_file[-11:-3])
-
+    latest_db_date = get_latest_db_date()
     while True:
+        latest_open_date = get_latest_open_date()
         today_utc = pd.to_datetime('now')
         today_ny = datetime.datetime.now(pytz.timezone('America/New_York'))
-        if last_scrape != today_ny.date():
-            open_days = check_market_status()
-            if open_days is not None:
-                close_date = open_days.loc[today_utc.date()]['market_close']
-                if today_utc.dayofyear > close_date.dayofyear or today_utc.year > close_date.year:
-                    if today_ny.hour > 10:
-                        last_scrape = today_ny.date()
-                        print('downloading db...')
-                        download_entire_db()
-                else:
-                    # need to make it wait number of hours until close
-                    print('waiting for market to close, waiting 1 hour...')
-                    time.sleep(3600)
-            else:
-                # need to wait till market will be open then closed next
-                print('market closed today, waiting 1 hour...')
-                time.sleep(3600)  # wait 1 hour
-        else:
-            # need to make this more intelligent so it waits until the next day
-            print('already scraped today, waiting 1 hour to check again...')
-            time.sleep(3600)
+        pd_today_ny = pd.to_datetime(today_ny.date())
+        if latest_db_date != latest_open_date:
+            if (latest_open_date - latest_db_date) >= pd.Timedelta('1D'):
+                print('db more than 1 day out of date, downloading...')
+                latest_db_date = download_entire_db(return_latest_date=True)
+            elif pd_today_ny == latest_open_date:  # if the market is open and the db isn't up to date with today...
+                print('downloading db with update from today...')
+                if today_ny.hour >= 22:
+                    latest_db_date = download_entire_db(return_latest_date=True)
 
+        print('sleeping 1h...')
+        time.sleep(3600)
+
+        # old code...don't think I need this anymore
+        #     open_days = check_market_status()
+        #     if open_days is not None:
+        #         close_date = open_days.loc[today_utc.date()]['market_close']
+        #         # TODO: add check if after closing time
+        #         if today_utc.dayofyear > close_date.dayofyear or today_utc.year > close_date.year:
+        #             if today_ny.hour > 10:  # need to wait until it has been processed to download
+        #                 last_scrape = today_ny.date()
+        #                 print('downloading db...')
+        #                 download_entire_db()
+        #         else:
+        #             # need to make it wait number of hours until close
+        #             print('waiting for market to close, waiting 1 hour...')
+        #             time.sleep(3600)
+        #     else:
+        #         # need to wait till market will be open then closed next
+        #         print('market closed today, waiting 1 hour...')
+        #         time.sleep(3600)  # wait 1 hour
+        # else:
+        #     # need to make this more intelligent so it waits until the next day
+        #     print('already scraped today, waiting 1 hour to check again...')
+        #     time.sleep(3600)
+
+
+def get_latest_db_date(storage_path=DEFAULT_STORAGE):
+    """
+    gets the date of the last full scrape of the db
+    """
+    files = glob.glob(storage_path + 'EOD_*.h5')
+    if len(files) > 0:
+        files = [f for f in files if len(f.split('/')[-1]) == 15]  # don't want any of the small files, only full DBs
+        latest_file = sorted(files, key=os.path.getctime)[-1]
+        last_date = pd.to_datetime(latest_file[-11:-3])
+        return last_date
+
+    return None
+
+
+def get_latest_open_date(market='NASDAQ'):
+    """
+    gets the latest date the markets were open (NASDAQ)
+    """
+    # today = datetime.datetime.now(pytz.timezone('America/New_York')).date()
+    today_utc = pd.to_datetime('now').date()
+    ndq = mcal.get_calendar(market)
+    open_days = ndq.schedule(start_date=today_utc - pd.Timedelta('10 days'), end_date=today_utc)
+    return pd.to_datetime(open_days.iloc[-1]['market_close'].date())
+
+
+def check_market_status():
+    """
+    Checks to see if market is open today.
+    Uses the pandas_market_calendars package as mcal
+    """
+    # today = datetime.datetime.now(pytz.timezone('America/New_York')).date()
+    today_utc = pd.to_datetime('now').date()
+    ndq = mcal.get_calendar('NASDAQ')
+    open_days = ndq.schedule(start_date=today_utc - pd.Timedelta('10 days'), end_date=today_utc)
+    if today_utc in open_days.index:
+        return open_days
+    else:
+        return None
 
 def update_all_stocks(return_headers=False, update_small_file=False):
     """
@@ -316,7 +371,7 @@ def load_one_stock_fulldf(full_df, s, make_files, filename):
     return df
 
 
-def get_latest_eod(storage_path='/home/nate/eod_data/', return_file=False):
+def get_latest_eod(storage_path=DEFAULT_STORAGE, return_file=False):
     files = glob.glob(storage_path + '*.h5')
     latest_file = sorted(files, key=os.path.getctime)[-1]
     latest_eod = latest_file[-11:-3]
@@ -326,7 +381,7 @@ def get_latest_eod(storage_path='/home/nate/eod_data/', return_file=False):
     return latest_eod
 
 
-def make_small_df(storage_path='/home/nate/eod_data/',
+def make_small_df(storage_path=DEFAULT_STORAGE,
                 filename='EOD_{}.h5',
                 latest_eod=None,
                 earliest_date='20150101'):
@@ -351,7 +406,7 @@ def make_small_df(storage_path='/home/nate/eod_data/',
 def load_stocks(datapath=HOME_DIR + 'stockdata/',
                 stocks=['GLD', 'DUST', 'NUGT'],
                 make_files=False,
-                eod_datapath='/home/nate/eod_data/',
+                eod_datapath=DEFAULT_STORAGE,
                 eod_filename='EOD_{}.h5',
                 latest_eod=None,
                 verbose=False,
@@ -372,6 +427,8 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
         eod_datapath = eod_datapath + eod_filename.format(latest_eod)
     else:
         eod_datapath = eod_datapath + eod_filename.format(earliest_date + '_' + latest_eod)
+        if not os.path.exists(eod_datapath):
+            make_small_df(earliest_date=earliest_date)
 
     dfs = {}
     # load big df with everything
@@ -380,7 +437,7 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
     stk_grps = full_df.groupby(by='Ticker')
     for t in tickers:
         dfs[t] = stk_grps.get_group(t)
-        
+
     # was doing this before but I think I don't have to...
     # jobs = []
     # with ProcessPoolExecutor() as executor:
@@ -420,7 +477,7 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
     return dfs
 
 
-def convert_full_df_to_hdf(eod_datapath='/home/nate/eod_data/EOD_{}.csv', latest_eod='20170812'):
+def convert_full_df_to_hdf(eod_datapath=DEFAULT_STORAGE + 'EOD_{}.csv', latest_eod='20170812'):
     eod_datapath = eod_datapath.format(latest_eod)
     eod_datapath_h5 = eod_datapath.strip('.csv')
     headers = ['Ticker',

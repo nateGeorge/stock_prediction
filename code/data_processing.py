@@ -656,7 +656,7 @@ def make_nn_data(sh_int, hist_points=40, future=10, test_frac=0.15, make_fresh=F
         scale_historical_feats(tr_feats)
         scale_historical_feats(te_feats)
 
-        if make_fresh:
+        if make_fresh and os.path.exists(filename):
             os.remove(filename)
 
         f = h5py.File(filename)
@@ -716,7 +716,7 @@ def scale_it(dat, tq=True):
 def load_nn_data_one_set(i=0, hist_points=40, future=10, test_frac=0.15):
     # loads just one set of neural net training data out of 10. 'i' specifies which set
     # first get folder name
-    fname = 'hist=' + str(hist_points) + 'fut=' + str(future) + 'test_frac=' + str(test_frac) + '/'
+    fname = 'hist=' + str(hist_points) + 'fut=' + str(future) + 'testfrac=' + str(test_frac) + '/'
     f = h5py.File(fname + 'ch_' + str(i) + '.h5')
     tr_feats = f['tr_feats'][:]
     tr_targs = f['tr_targs'][:]
@@ -733,16 +733,16 @@ def load_nn_data_one_set(i=0, hist_points=40, future=10, test_frac=0.15):
 if __name__ == "__main__":
     short_stocks = sse.get_stocks()
     dfs, sh_int, fin_sh = load_stocks(stocks=short_stocks, verbose=True)
-    future = 10
-    hist_points = 40
-    make_all_sh_future(sh_int, future=future, hist_points=hist_points, verbose=False)
-    # del dfs
-    # del fin_sh
-    gc.collect()
-
-    make_nn_data(sh_int, hist_points=hist_points, future=future, make_fresh=True)
-
-    tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks = load_nn_data_one_set(i=0, hist_points=hist_points, future=future)
+    # future = 10
+    # hist_points = 40
+    # make_all_sh_future(sh_int, future=future, hist_points=hist_points, verbose=False)
+    # # del dfs
+    # # del fin_sh
+    # gc.collect()
+    #
+    # make_nn_data(sh_int, hist_points=hist_points, future=future, make_fresh=True)
+    #
+    # tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks = load_nn_data_one_set(i=0, hist_points=hist_points, future=future)
 
     # needed this one time to make plots...not sure if needed again
     # for s in sh_int_stocks:

@@ -106,7 +106,9 @@ def download_entire_db(storage_path=DEFAULT_STORAGE,
                 complevel=9)
     if remove_last:
         files = glob.glob(storage_path + 'EOD_*.h5')
-        latest_file = sorted(files, key=os.path.getctime)[-2]
+        files = [f for f in files if len(f.split('/')[-1]) == 15]  # don't want any of the small files, only full DBs
+        latest_file = sorted(files, key=os.path.getctime)[-1]
+        print(latest_file)
         os.remove(latest_file)
 
     os.remove(storage_path + z.filelist[0].filename)

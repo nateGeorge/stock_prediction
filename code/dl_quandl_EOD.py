@@ -107,9 +107,11 @@ def download_entire_db(storage_path=DEFAULT_STORAGE,
     if remove_last:
         files = glob.glob(storage_path + 'EOD_*.h5')
         files = [f for f in files if len(f.split('/')[-1]) == 15]  # don't want any of the small files, only full DBs
-        latest_file = sorted(files, key=os.path.getctime)[-1]
-        print(latest_file)
-        os.remove(latest_file)
+        print(sorted(files, key=os.path.getctime))
+        if len(files) != 1:
+            latest_file = sorted(files, key=os.path.getctime)[-2]
+            print('removing', latest_file)
+            os.remove(latest_file)
 
     os.remove(storage_path + z.filelist[0].filename)
 
@@ -143,17 +145,18 @@ def daily_download_entire_db(storage_path=DEFAULT_STORAGE):
     """
     latest_db_date = get_latest_db_date()
     while True:
-        latest_open_date = get_latest_open_date()
+        latest_close_date = get_latest_close_date()
         today_utc = pd.to_datetime('now')
         today_ny = datetime.datetime.now(pytz.timezone('America/New_York'))
         pd_today_ny = pd.to_datetime(today_ny.date())
-        if latest_db_date != latest_open_date:
-            if (latest_open_date - latest_db_date) >= pd.Timedelta('1D'):
-                print('db more than 1 day out of date, downloading...')
-                latest_db_date = download_entire_db(return_latest_date=True)
-            elif pd_today_ny == latest_open_date:  # if the market is open and the db isn't up to date with today...
-                print('downloading db with update from today...')
+        if latest_db_date.date() != latest_close_date.date():
+            if (latest_close_date.date() - latest_db_date.date()) >= pd.Timedelta('1D'):
+                if today_utc.hour > latest_close_date.hour:
+                    print('db more than 1 day out of date, downloading...')
+                    latest_db_date = download_entire_db(return_latest_date=True)
+            elif pd_today_ny.date() == latest_close_date.date():  # if the market is open and the db isn't up to date with today...
                 if today_ny.hour >= 22:
+                    print('downloading db with update from today...')
                     latest_db_date = download_entire_db(return_latest_date=True)
 
         print('sleeping 1h...')
@@ -197,15 +200,15 @@ def get_latest_db_date(storage_path=DEFAULT_STORAGE):
     return None
 
 
-def get_latest_open_date(market='NASDAQ'):
+def get_latest_close_date(market='NASDAQ'):
     """
-    gets the latest date the markets were open (NASDAQ)
+    gets the latest date the markets were open (NASDAQ), and returns the closing datetime
     """
     # today = datetime.datetime.now(pytz.timezone('America/New_York')).date()
     today_utc = pd.to_datetime('now').date()
     ndq = mcal.get_calendar(market)
     open_days = ndq.schedule(start_date=today_utc - pd.Timedelta('10 days'), end_date=today_utc)
-    return pd.to_datetime(open_days.iloc[-1]['market_close'].date())
+    return open_days.iloc[-1]['market_close']
 
 
 def check_market_status():
@@ -221,6 +224,7 @@ def check_market_status():
         return open_days
     else:
         return None
+
 
 def update_all_stocks(return_headers=False, update_small_file=False):
     """

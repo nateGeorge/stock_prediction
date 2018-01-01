@@ -266,6 +266,11 @@ def create_tas(bars,
     bars['sar_diff'] = bars['sar'] - bars['typical_price']
     # need to make an oscillator for this
 
+    # simple moving average
+    # 10 day
+    bars['sma_10_cl'] = talib.SMA(mult_close, timeperiod=10) / mult
+    bars['sma_10_tp'] = talib.SMA(mult_tp, timeperiod=10) / mult
+
     # triple exponential moving average
     bars['tema_cl'] = talib.TEMA(mult_close, timeperiod=30) / mult
     bars['tema_tp'] = talib.TEMA(mult_tp, timeperiod=30) / mult

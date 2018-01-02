@@ -584,7 +584,7 @@ if __name__ == "__main__":
     import short_squeeze_eda as sse
     short_stocks = sse.get_stocks()
     dfs, sh_int, fin_sh = dp.load_stocks(stocks=short_stocks, verbose=True)
-    future = 10
+    future = 5*6  # 6 business weeks
     hist_points = 40
     dp.make_all_sh_future(sh_int, future=future, hist_points=hist_points, verbose=False)
     # del dfs

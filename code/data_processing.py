@@ -236,7 +236,7 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
             for s in ret_stocks:
                 dfs[s].reset_index(inplace=True)
 
-        ss_sh = sse.get_short_interest_data()
+        ss_sh = sse.get_short_interest_data(all_cols=True)
         ss_sh.rename(columns={'Symbol': 'Ticker'}, inplace=True)
         ss_sh_grp = ss_sh.groupby('Ticker')
         sh_stocks = set(ss_sh['Ticker'].unique())
@@ -283,6 +283,7 @@ def make_sh_df(s, df, ss_sh_df, verbose=False):
     new.ffill(inplace=True)
     new.fillna(-1, inplace=True)
     new.set_index('Date', inplace=True)
+    new['score'] = calc_score(new)  # custom scoring metric
     return new
 
 
@@ -728,6 +729,27 @@ def load_nn_data_one_set(i=0, hist_points=40, future=10, test_frac=0.15):
     stocks = pd.read_hdf(fname + 'ch_' + str(i) + 'stocks.h5')
     stocks = stocks['Tickers'].values
     return tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks
+
+
+def calc_score(df):
+    """
+    calculates custom scoring metric based on short squeeze ranking, etc
+    """
+    score = 0
+    if df['Short Squeeze Ranking'] not in [-1, np.nan]:
+        score = df['Short Squeeze Ranking'] * 0.4
+    if df['Short % of Float'] not in [-1, np.nan]:
+        score += df['Short % of Float'] * 0.1
+    if df['Days to Cover'] not in [-1, np.nan]:
+        score += df['Days to Cover'] * 0.2
+    if df['% from 52-wk High'] not in [-1, np.nan]:
+        score += df['% from 52-wk High'] * 0.1
+
+    score += df['macd_tp'] * 0.2
+    if df['macd_tp'] <= 0.05:
+        score -= 50
+
+    return score
 
 
 if __name__ == "__main__":

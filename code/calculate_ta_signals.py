@@ -51,6 +51,14 @@ def get_indicator_list():
      'midpr_diff',
      'sar',
      'sar_diff',
+     'sma_10_cl',
+     'sma_10_tp',
+     'sma_20_cl',
+     'sma_20_tp',
+     'sma_30_cl',
+     'sma_30_tp',
+     'sma_40_cl',
+     'sma_40_tp',
      'tema_cl',
      'tema_tp',
      'tema_cl_diff',
@@ -270,6 +278,15 @@ def create_tas(bars,
     # 10 day
     bars['sma_10_cl'] = talib.SMA(mult_close, timeperiod=10) / mult
     bars['sma_10_tp'] = talib.SMA(mult_tp, timeperiod=10) / mult
+    # 20 day
+    bars['sma_20_cl'] = talib.SMA(mult_close, timeperiod=20) / mult
+    bars['sma_20_tp'] = talib.SMA(mult_tp, timeperiod=20) / mult
+    # 30 day
+    bars['sma_30_cl'] = talib.SMA(mult_close, timeperiod=30) / mult
+    bars['sma_30_tp'] = talib.SMA(mult_tp, timeperiod=30) / mult
+    # 40 day
+    bars['sma_40_cl'] = talib.SMA(mult_close, timeperiod=40) / mult
+    bars['sma_40_tp'] = talib.SMA(mult_tp, timeperiod=40) / mult
 
     # triple exponential moving average
     bars['tema_cl'] = talib.TEMA(mult_close, timeperiod=30) / mult

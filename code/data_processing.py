@@ -283,7 +283,7 @@ def make_sh_df(s, df, ss_sh_df, verbose=False):
     new.ffill(inplace=True)
     new.fillna(-1, inplace=True)
     new.set_index('Date', inplace=True)
-    new['score'] = calc_score(new)  # custom scoring metric
+    new['score'] = new.apply(lambda x: calc_score(x), axis=1)  # custom scoring metric
     return new
 
 
@@ -735,15 +735,16 @@ def calc_score(df):
     """
     calculates custom scoring metric based on short squeeze ranking, etc
     """
+    # might want to also check for -1 or whatever missing values are filled in with
     score = 0
-    if df['Short Squeeze Ranking'] not in [-1, np.nan]:
-        score = df['Short Squeeze Ranking'] * 0.4
-    if df['Short % of Float'] not in [-1, np.nan]:
-        score += df['Short % of Float'] * 0.1
-    if df['Days to Cover'] not in [-1, np.nan]:
-        score += df['Days to Cover'] * 0.2
-    if df['% from 52-wk High'] not in [-1, np.nan]:
-        score += df['% from 52-wk High'] * 0.1
+    if pd.notna(df['Short_Squeeze_Ranking']):
+        score = df['Short_Squeeze_Ranking'] * 0.4
+    if pd.notna(df['Short_%_of_Float']):
+        score += df['Short_%_of_Float'] * 0.1
+    if pd.notna(df['Days_to_Cover']):
+        score += df['Days_to_Cover'] * 0.2
+    if pd.notna(df['%_from_52-wk_High']):
+        score += df['%_from_52-wk_High'] * 0.1
 
     score += df['macd_tp'] * 0.2
     if df['macd_tp'] <= 0.05:

@@ -485,6 +485,96 @@ def create_tas(bars,
         return bars
 
 
+def create_varied_tas(bars,
+                    verbose=False,
+                    ohlcv_cols=['High', 'Low', 'Open', 'Close', 'Volume'],
+                    return_df=False):
+    """
+    basically the same thing as create_tas, but only create a variety of
+    indicators that showed some correlation to the future price 40 days in the future.
+    bband_u_tp_diff,
+    bband_u_tp_diff_hi,
+    sma diffs (% from 50 day mva was correlated),
+    apo_tp,
+    cmo_tp,
+    macd stuff,
+    mdi,
+    ppo_tp,
+    rsi_tp,
+    trix_tp
+    """
+    h, l, o, c, v = ohlcv_cols
+    if 'typical_price' not in bars.columns:
+        bars['typical_price'] = bars[['High', 'Low', 'Close']].mean(axis=1)
+
+    # bollinger bands
+    # strange bug, if values are small, need to multiply to larger value for some reason
+    mult = 1
+    last_close = bars.iloc[0][c]
+    lc_m = last_close * mult
+    while lc_m < 1:
+        mult *= 10
+        lc_m = last_close * mult
+
+    if verbose:
+        print('using multiplier of', mult)
+
+    mult_tp = bars['typical_price'].values * mult
+    mult_close = bars[c].values * mult
+    mult_open = bars[o].values * mult
+    mult_high = bars[h].values * mult
+    mult_low = bars[l].values * mult
+
+
+    ### overlap studies
+    # bollinger bands
+    for i in range(10, 201, 20):
+        upper_tp, middle_tp, lower_tp = talib.BBANDS(mult_tp,
+                                        timeperiod=i,
+                                        nbdevup=2,
+                                        nbdevdn=2)
+        bars['bband_u_tp_diff_' + str(i)] = upper_tp / mult - bars['typical_price']
+        bars['bband_u_tp_diff_hi_' + str(i)] = upper_tp / mult - bars[h]
+
+        # simple moving average
+        bars['sma_' + str(i) + '_tp_diff'] = (talib.SMA(mult_tp, timeperiod=i) / mult) - bars['typical_price']
+
+        # Chande Momentum Oscillator
+        bars['cmo_tp_' + str(i)] = talib.CMO(mult_tp, timeperiod=i)
+
+        # minus di - Minus Directional Indicator
+        bars['mdi_' + str(i)] = talib.MINUS_DI(mult_high, mult_low, mult_close, timeperiod=i)
+
+        # rate of change
+        bars['roc_tp_' + str(i)] = talib.ROC(mult_tp, timeperiod=i)
+
+        # Relative Strength Index
+        bars['rsi_tp_' + str(i)] = talib.RSI(mult_tp, timeperiod=i)
+
+        # trix - 1-day Rate-Of-Change (ROC) of a Triple Smooth EMA
+        bars['trix_tp_' + str(i)] = talib.TRIX(mult_tp, timeperiod=i)
+
+        # Absolute Price Oscillator
+        # values around -100 to +100
+        bars['apo_tp_slow=' + str(i)] = talib.APO(mult_tp, fastperiod=i//2, slowperiod=i, matype=0)
+
+        # Moving Average Convergence/Divergence
+        # https://www.quantopian.com/posts/how-does-the-talib-compute-macd-why-the-value-is-different
+        # macd diff btw fast and slow EMA
+        macd_tp, macdsignal_tp, macdhist_tp = talib.MACD(mult_tp, fastperiod=i//2, slowperiod=i, signalperiod=i)
+        bars['macd_tp=' + str(i)] = macd_tp / mult
+        bars['macdsignal_tp=' + str(i)] = macdsignal_tp / mult
+        bars['macdhist_tp=' + str(i)] = macdhist_tp / mult
+
+        # percentage price Oscillator
+        bars['ppo_tp=' + str(i)] = talib.PPO(mult_tp, fastperiod=i//2, slowperiod=i, matype=0)
+
+    bars.fillna(method='bfill', inplace=True)
+
+    if return_df:
+        return bars
+
+
 def reject_outliers(sr, iq_range=0.5):
     pcnt = (1 - iq_range) / 2
     qlow, median, qhigh = sr.dropna().quantile([pcnt, 0.50, 1-pcnt])

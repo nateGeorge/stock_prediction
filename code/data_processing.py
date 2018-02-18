@@ -163,7 +163,10 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
                 finra_shorts=True,
                 short_interest=True,
                 verbose=False,
-                earliest_date='20150101'):
+                debug=False,
+                earliest_date='20150101',
+                TAfunc='create_tas',
+                calc_scores=True):
     """
     :param stocks: list of strings; tickers (must be caps)
     :param TAs: boolean, if true, calculates technical indicators
@@ -171,6 +174,8 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
     :param verbose: boolean, prints more debug if true
     :param earliest_date: if using an abbreviated EOD .h5 file (for quicker
                             loading), provide earliest date
+    :param TAfunc: string, function name for TA creation in calculate_ta_signals.py
+    :param calc_scores: boolean, if true will calculate custom scoring metric
 
     :returns: dict of pandas dataframes with tickers as keys,
                 dict of dataframes merged with short interest data (sh_int),
@@ -185,7 +190,7 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
         print('calculating TAs...')
         with ProcessPoolExecutor(max_workers=None) as executor:
             for s in ret_stocks:
-                r = executor.submit(cts.create_tas,
+                r = executor.submit(getattr(cts, TAfunc),
                                     dfs[s],
                                     return_df=True)
                 jobs.append((s, r))
@@ -240,25 +245,32 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
         ss_sh.rename(columns={'Symbol': 'Ticker'}, inplace=True)
         ss_sh_grp = ss_sh.groupby('Ticker')
         sh_stocks = set(ss_sh['Ticker'].unique())
-        jobs = []
-        with ProcessPoolExecutor() as executor:
+        if debug:
             for s in ret_stocks:
                 if s in sh_stocks:
-                    r = executor.submit(make_sh_df,
-                                        s,
-                                        dfs[s],
-                                        ss_sh_grp.get_group(s))
-                    jobs.append((s, r))
+                    sh_int[s] = make_sh_df(s, dfs[s], ss_sh_grp.get_group(s))
+        else:
+            jobs = []
+            with ProcessPoolExecutor() as executor:
+                for s in ret_stocks:
+                    if s in sh_stocks:
+                        r = executor.submit(make_sh_df,
+                                            s,
+                                            dfs[s],
+                                            ss_sh_grp.get_group(s),
+                                            verbose,
+                                            calc_scores)
+                        jobs.append((s, r))
 
-        for s, r in jobs:
-            res = r.result()
-            if res is not None:
-                sh_int[s] = res
-            else:
-                print('result is None for', s)
+            for s, r in jobs:
+                res = r.result()
+                if res is not None:
+                    sh_int[s] = res
+                else:
+                    print('result is None for', s)
 
-        del jobs
-        gc.collect()
+            del jobs
+            gc.collect()
 
     return dfs, sh_int, fin_sh
 
@@ -272,7 +284,7 @@ def load_dfs():
     return dat['dfs'], dat['sh_int'], dat['fin_sh']
 
 
-def make_sh_df(s, df, ss_sh_df, verbose=False):
+def make_sh_df(s, df, ss_sh_df, verbose=False, calc_scores=True):
     if verbose:
         print(s)
 
@@ -283,7 +295,14 @@ def make_sh_df(s, df, ss_sh_df, verbose=False):
     new.ffill(inplace=True)
     new.fillna(-1, inplace=True)
     new.set_index('Date', inplace=True)
-    new['score'] = new.apply(lambda x: calc_score(x), axis=1)  # custom scoring metric
+    if calc_scores:
+        try:
+            new['score'] = new.apply(calc_score, axis=1)  # custom scoring metric
+            new['score_no_penalty'] = new.apply(calc_score, penalty=False, axis=1)
+        except ValueError:  # if all the values are nan, then gives error (e.g. ACFN)
+            new['score'] = np.nan
+            new['score_no_penalty'] = np.nan
+
     return new
 
 
@@ -731,7 +750,7 @@ def load_nn_data_one_set(i=0, hist_points=40, future=10, test_frac=0.15):
     return tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks
 
 
-def calc_score(df):
+def calc_score(df, penalty=True):
     """
     calculates custom scoring metric based on short squeeze ranking, etc
     """
@@ -747,7 +766,7 @@ def calc_score(df):
         score += df['%_from_52-wk_High'] * 0.1
 
     score += df['macd_tp'] * 0.2
-    if df['macd_tp'] <= 0.05:
+    if penalty and df['macd_tp'] <= 0.05:
         score -= 50
 
     return score

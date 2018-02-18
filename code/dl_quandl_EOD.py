@@ -410,7 +410,6 @@ def make_small_df(storage_path=DEFAULT_STORAGE,
 
 
 def load_stocks(datapath=HOME_DIR + 'stockdata/',
-                stocks=['GLD', 'DUST', 'NUGT'],
                 make_files=False,
                 eod_datapath=DEFAULT_STORAGE,
                 eod_filename='EOD_{}.h5',
@@ -419,7 +418,6 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
                 earliest_date=None):
     """
     :param datapath: string; path to stock datafiles
-    :param stocks: list of strings, stock tickers (must be uppercase)
     :param make_files: bool, will save individual stock file if true (loading full dataset is quite slow)
     :param eod_datapath: string, path to full eod data
     :param latest_eod: string, yyyymmdd; latest day eod data was collected
@@ -437,7 +435,7 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
             make_small_df(earliest_date=earliest_date)
 
     dfs = {}
-    # load big df with everything
+    # load big df with everything, and load all stocks
     full_df = pd.read_hdf(eod_datapath, names=HEADERS)
     tickers = set(full_df['Ticker'])
     stk_grps = full_df.groupby(by='Ticker')

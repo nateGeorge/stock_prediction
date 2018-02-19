@@ -89,8 +89,22 @@ def download_entire_db(storage_path=DEFAULT_STORAGE,
     :param remove_last: removes last instance of the EOD dataset
     """
     # first check if we have the latest data
+    if not os.path.exists(storage_path):
+        fullpath = ''
+        splitpath = storage_path.split('/')
+        for i, p in enumerate(splitpath, 1):
+            path = '/'.join(splitpath[:i])
+            if not os.path.exists(path):
+                os.mkdir(path)
+
     zip_file_url = 'https://www.quandl.com/api/v3/databases/EOD/data?api_key=' + Q_KEY
-    r = req.get(zip_file_url)
+    while True:
+        try:
+            r = req.get(zip_file_url, timeout=10)
+            break
+        except Exception as e:
+            print(e)
+
     z = zipfile.ZipFile(io.BytesIO(r.content))
     z.extractall(path=storage_path)
     df = pd.read_csv(storage_path + \

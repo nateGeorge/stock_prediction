@@ -12,6 +12,7 @@ import gc
 import quandl
 import pandas as pd
 import requests as req
+from requests.adapters import HTTPAdapter
 from pytz import timezone
 from concurrent.futures import ProcessPoolExecutor
 import pandas_market_calendars as mcal
@@ -90,7 +91,9 @@ def download_entire_db(storage_path=DEFAULT_STORAGE,
     """
     # first check if we have the latest data
     zip_file_url = 'https://www.quandl.com/api/v3/databases/EOD/data?api_key=' + Q_KEY
-    r = req.get(zip_file_url)
+    s = req.Session()
+    s.mount('https', HTTPAdapter(max_retries=10))
+    r = s.get(zip_file_url)
     z = zipfile.ZipFile(io.BytesIO(r.content))
     z.extractall(path=storage_path)
     df = pd.read_csv(storage_path + \

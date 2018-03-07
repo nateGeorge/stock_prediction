@@ -1,3 +1,6 @@
+# core
+import os
+
 import datetime
 from pytz import timezone
 import requests as req
@@ -55,7 +58,11 @@ def download_stocks(stocklist=STOCKLIST):
 def load_stocks(stocks=['GLD', 'DUST', 'NUGT']):
     dfs = {}
     for s in stocks:
-        df = pd.read_csv('../stockdata/' + s + '.csv.gz', index_col=0, parse_dates=True)
+        stockfile = '../stockdata/' + s + '.csv.gz'
+        if not os.path.exists(stockfile):
+            download_stocks(stocklist=[s])
+
+        df = pd.read_csv(stockfile, index_col=0, parse_dates=True)
         dfs[s] = df
 
     return dfs

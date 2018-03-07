@@ -343,14 +343,14 @@ def download_stocks(stocklist=STOCKLIST, fresh=False):
     for s in stocks:
         print(s)
         stockfile = '../stockdata/' + s + '.csv.gz'
-        if fresh:
+        if fresh or not os.path.exists(stockfile):
             print('downloading fresh')
             stock = quandl.get('EOD/' + s)
             stock.to_csv(stockfile, compression='gzip')
             dfs[s] = stock
             continue
 
-        if os.path.exists(stockfile):
+        else:
             stock = pd.read_csv(stockfile, index_col=0)
             stock.index = pd.to_datetime(stock.index)
             timedelta_step = 1

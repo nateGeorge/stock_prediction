@@ -61,7 +61,6 @@ def create_nn_data4conv1d(train_fs, test_fs):
     return X_trains, X_tests
 
 
-
 def create_model_1(X_train):
     """
     Found that this is overfitting because the test data (val) loss
@@ -419,6 +418,7 @@ def plot_data_preds_scaled(model, stock, scaled_ts, scaled_fs, dates, train_test
         train_size = int(train_frac * dates.shape[0])
         print(train_size)
         feats = scaled_fs[stock]
+        print(feats.shape)
         for_pred = feats.reshape(feats.shape[0],
                                 1, feats.shape[1])
         preds = model.predict(for_pred).ravel()
@@ -540,7 +540,8 @@ def plot_data_preds_unscaled(model, stock, t_scalers, scaled_ts, scaled_fs, targ
             'color': 'rgb(0, 255, 0)',
             'width': 2,
         }
-    }]}
+    }],
+    'yaxis': {'title': 'GLD price'}}
 
     trace0 = go.Scatter(
         x = dates[-datapoints:],

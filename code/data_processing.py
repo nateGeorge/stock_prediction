@@ -182,7 +182,7 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
                 dict of dataframes merged with finra data (fin_sh)
     """
     print('loading stocks...')
-    dfs = dlq.load_stocks(stocks=stocks, verbose=verbose, earliest_date=earliest_date)
+    dfs = dlq.load_stocks(verbose=verbose, earliest_date=earliest_date)
     ret_stocks = sorted(dfs.keys())  # sometimes some stocks are not in there
 
     jobs = []

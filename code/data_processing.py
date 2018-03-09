@@ -620,7 +620,7 @@ def make_nn_data(sh_int, hist_points=40, future=10, test_frac=0.15, make_fresh=F
     feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col])))
     chunks = 10
     breakpoint = len(sh_int_stocks) // chunks
-    fname = 'hist=' + str(hist_points) + 'fut=' + str(future) + 'testfrac=' + str(test_frac) + '/'
+    fname = big_data_home_dir + 'hist=' + str(hist_points) + 'fut=' + str(future) + 'testfrac=' + str(test_frac) + '/'
     if not os.path.exists(fname):
         os.mkdir(fname)
 
@@ -736,7 +736,7 @@ def scale_it(dat, tq=True):
 def load_nn_data_one_set(i=0, hist_points=40, future=10, test_frac=0.15):
     # loads just one set of neural net training data out of 10. 'i' specifies which set
     # first get folder name
-    fname = 'hist=' + str(hist_points) + 'fut=' + str(future) + 'testfrac=' + str(test_frac) + '/'
+    fname = big_data_home_dir + 'hist=' + str(hist_points) + 'fut=' + str(future) + 'testfrac=' + str(test_frac) + '/'
     f = h5py.File(fname + 'ch_' + str(i) + '.h5')
     tr_feats = f['tr_feats'][:]
     tr_targs = f['tr_targs'][:]
@@ -773,8 +773,9 @@ def calc_score(df, penalty=True):
 
 
 if __name__ == "__main__":
-    short_stocks = sse.get_stocks()
-    dfs, sh_int, fin_sh = load_stocks(stocks=short_stocks, verbose=True)
+    pass
+    # short_stocks = sse.get_stocks()
+    # dfs, sh_int, fin_sh = load_stocks(stocks=short_stocks, verbose=True)
     # future = 10
     # hist_points = 40
     # make_all_sh_future(sh_int, future=future, hist_points=hist_points, verbose=False)

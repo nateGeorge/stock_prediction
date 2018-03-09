@@ -580,18 +580,23 @@ def round_to_005(x):
     return float('%.3f'%res)
 
 
-if __name__ == "__main__":
+def create_data(future=30, hist_points=40):
+    """
+    uses about 6 business weeks for future as default -- probably too big
+    """
     import short_squeeze_eda as sse
     short_stocks = sse.get_stocks()
     dfs, sh_int, fin_sh = dp.load_stocks(stocks=short_stocks, verbose=True)
-    future = 5*6  # 6 business weeks
-    hist_points = 40
     dp.make_all_sh_future(sh_int, future=future, hist_points=hist_points, verbose=False)
     # del dfs
     # del fin_sh
     gc.collect()
 
     dp.make_nn_data(sh_int, hist_points=hist_points, future=future, make_fresh=True)
+
+
+if __name__ == "__main__":
+    # create_data()
     tr_feats, tr_targs, te_feats, te_targs, tr_indices, te_indices, stocks = dp.load_nn_data_one_set(i=9)
     # train_net(tr_feats, tr_targs, te_feats, te_targs)
 

@@ -12,7 +12,7 @@ import data_processing as dp
 from keras.layers import Input, Dense, Dropout, BatchNormalization, LSTM, Conv1D, MaxPooling1D, Activation, Flatten, Concatenate, Reshape
 from keras.models import Model, load_model
 from keras import optimizers
-from keras.callbacks import EarlyStopping
+from keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
 from keras.regularizers import l1_l2
 import keras.backend as K
 import keras.losses
@@ -387,7 +387,10 @@ def train_net(tr_feats=None,
         test = te_feats
 
     es = EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=0, mode='auto')
-    cb = [es]
+    model_file = get_model_path(base=model, folder=folder)
+    mc = ModelCheckpoint(model_file, save_best_only=True)
+    tb = TensorBoard(log_dir='')
+    cb = [es, mc]
 
     mem_use = get_model_memory_usage(batch_size, mod)
     print('expected memory usage:', mem_use)
@@ -404,7 +407,6 @@ def train_net(tr_feats=None,
                     callbacks=cb,
                     batch_size=batch_size)
 
-    model_file = get_model_path(base=model, folder=folder)
     print('saving as', model_file)
     sk.save_network(mod, model_file)
 
@@ -610,8 +612,8 @@ if __name__ == "__main__":
     # best_99pct = get_best_thresh(mod, train=tr_feats.shape[0], -1), train_targs=train_targs, te_feats=te_feats.reshape(te_feats.shape[0], -1), test_targs=test_targs, cln=False)
 
 
-    train_net(tr_feats, tr_targs, te_feats, te_targs, model='deeper_conv1', generator=True)
+    #train_net(tr_feats, tr_targs, te_feats, te_targs, model='deeper_conv1', generator=True)
 
-    dp.make_nn_data(sh_int, hist_points=hist_points, future=5, make_fresh=True)
+    #dp.make_nn_data(sh_int, hist_points=hist_points, future=5, make_fresh=True)
 
     # train_net(tr_feats, tr_targs, te_feats, te_targs, model='big_conv1')  # wont work with 40 history points

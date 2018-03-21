@@ -48,6 +48,7 @@ def get_latest_earliest_date(dfs, verbose=False):
 
     return max(earliest_dates), earliest_dates_df
 
+
 def drop_cols(dfs, ignore_all=False):
     """
     drops columns that are of no use
@@ -58,14 +59,15 @@ def drop_cols(dfs, ignore_all=False):
 
     # some columns are ignored because they have large outliers
     # that can't really be ignored
-    ignore_cols = set(['Open',
-                        'Close',
-                        'Low',
-                        'High',
-                        'Volume',
-                        'Dividend',
-                        'Split',
-                        'Ticker']
+    ignore_cols = ['Open',
+                    'Close',
+                    'Low',
+                    'High',
+                    'Volume',
+                    'Dividend',
+                    'Split',
+                    'Ticker',
+                    'Avg._Daily_Vol.']
     if ignore_all:
         ignore_cols += ['bband_u_cl',
                         'bband_m_cl',
@@ -109,13 +111,15 @@ def drop_cols(dfs, ignore_all=False):
                         'natr',
                         'trange',
                         'Shares_Float',
-                        'Shares_Outstanding',
-                        'Avg._Daily_Vol.'])
+                        'Shares_Outstanding']
+
+    ignore_cols = set(ignore_cols)
 
     first = list(dfs.keys())[0]
     keep_cols = [c for c in dfs[first].columns.tolist() if c not in ignore_cols]
     for s in dfs.keys():
         dfs[s] = dfs[s][keep_cols]
+
 
 def get_no_info_rate(targets, targ_labels):
     """
@@ -135,7 +139,14 @@ def get_no_info_rate(targets, targ_labels):
         print('no info rate:', str(tot_1 / (tot_0 + tot_1)))
 
 
-def make_ohlcv_feats_targs_one(s, df, past_cols, fut_cols, past_periods, future_days, threshold=0.05, verbose=False):
+def make_ohlcv_feats_targs_one(s,
+                                df,
+                                past_cols,
+                                fut_cols,
+                                past_periods,
+                                future_days,
+                                threshold=0.05,
+                                verbose=False):
     if verbose:
         print(s)
 
@@ -265,7 +276,7 @@ def get_features_targets_wide(dfs, train_frac=0.9):
     train_targets = targets[:train_size]
     test_targets = targets[train_size:]
 
-    return train_features, test_features, train_targets, test_targets
+    return train_features, test_features, train_targets, test_targets, feat_labels, targ_labels
 
 
 def get_features_targets_deep(dfs, train_frac=0.9):
@@ -279,16 +290,17 @@ def get_features_targets_deep(dfs, train_frac=0.9):
     feat_labels = []
     targ_labels = []
     train_features = None
-    train_size = int(features.shape[0] * train_frac)
 
     for s in dfs.keys():
         targ_cols = [c for c in dfs[s].columns if 'f=' in c]
         feat_cols = [c for c in dfs[s].columns if c not in set(targ_cols)]
         no_missing = dfs[s].dropna()
         s_features = no_missing[feat_cols]
-        feat_labels.extend([s + '_' + c for c in s_features.columns.tolist()])
+        feat_labels = [c for c in s_features.columns.tolist()]
         s_targets = no_missing[targ_cols]
-        targ_labels.extend([s + '_' + c for c in s_targets.columns.tolist()])
+        targ_labels = [c for c in s_targets.columns.tolist()]
+
+        train_size = int(s_features.shape[0] * train_frac)
         if train_features is None:
             train_features = s_features.values[:train_size]
             train_targets = s_targets.values[:train_size]
@@ -300,20 +312,22 @@ def get_features_targets_deep(dfs, train_frac=0.9):
             test_features = np.vstack((test_features, s_features[train_size:]))
             test_targets = np.vstack((test_targets, s_targets[train_size:]))
 
-    return train_features, test_features, train_targets, test_targets
+    return train_features, test_features, train_targets, test_targets, feat_labels, targ_labels
 
-top_stocks = get_top_stocks(num=6)
-dfs, _, _ = dp.load_stocks(stocks=top_stocks,
-                           finra_shorts=False,
-                           short_interest=False,
-                           earliest_date=None,
-                           calc_scores=False)
+if __name__ == "__main__":
+    top_stocks = get_top_stocks(num=6)
+    dfs, _, _ = dp.load_stocks(stocks=top_stocks,
+                               finra_shorts=False,
+                               short_interest=False,
+                               earliest_date=None,
+                               calc_scores=False)
 
-for s in dfs.keys():
-    # standardize to latest date so they all have the same earliest time
-    dfs[s] = dfs[s][dfs[s].index > latest_date]
+    latest_date, ld_df = get_latest_earliest_date(dfs)
+    for s in dfs.keys():
+        # standardize to latest date so they all have the same earliest time
+        dfs[s] = dfs[s][dfs[s].index > latest_date]
 
-drop_cols(dfs)
+    drop_cols(dfs)
 
-make_ohlcv_feats_targs_multithread(dfs, threshold=0.01)
-train_features, test_features, train_targets, test_targets = get_features_targets_deep(dfs)
+    make_ohlcv_feats_targs_multithread(dfs, threshold=0.01)
+    train_features, test_features, train_targets, test_targets = get_features_targets_deep(dfs)

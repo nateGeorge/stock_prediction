@@ -184,9 +184,17 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
     print('loading stocks...')
     all_stocks_dfs = dlq.load_stocks(verbose=verbose, earliest_date=earliest_date)
     dfs = {}
+    existing_stocks = set(all_stocks_dfs.keys())
+    if stocks is None:
+        stocks = existing_stocks
+    
     for s in stocks:
-        dfs[s] = all_stocks_dfs[s]
-        
+        if s in existing_stocks:
+            dfs[s] = all_stocks_dfs[s]
+        else:
+            if verbose:
+                print('stock', s, 'not in quandl data!')
+
     ret_stocks = sorted(dfs.keys())  # sometimes some stocks are not in there
 
     jobs = []

@@ -187,7 +187,7 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
     existing_stocks = set(all_stocks_dfs.keys())
     if stocks is None:
         stocks = existing_stocks
-    
+
     for s in stocks:
         if s in existing_stocks:
             dfs[s] = all_stocks_dfs[s]

@@ -1,11 +1,11 @@
 import numpy as np
 import talib
 
-def get_indicator_list():
+def get_indicator_list(cl=True, tp=True):
     """
     returns list of indicators
     """
-    return ['bband_u_cl', # bollinger bands
+    TA_list = ['bband_u_cl', # bollinger bands
      'bband_m_cl',
      'bband_l_cl',
      'bband_u_tp',
@@ -48,9 +48,11 @@ def get_indicator_list():
      'midp_cl_diff',
      'midp_tp_diff',
      'midpr',
-     'midpr_diff',
+     'midpr_diff_cl',
+     'midpr_diff_tp',
      'sar',
-     'sar_diff',
+     'sar_diff_cl',
+     'midpr_diff_tp',
      'sma_10_cl',
      'sma_10_tp',
      'sma_20_cl',
@@ -98,14 +100,8 @@ def get_indicator_list():
      'pldm',
      'ppo_cl',
      'ppo_tp',
-     'roc_cl',
-     'roc_tp',
      'rocp_cl',
      'rocp_tp',
-     'rocr_cl',
-     'rocr_tp',
-     'rocr_cl_100',
-     'rocr_tp_100',
      'rsi_cl',
      'rsi_tp',
      'slowk', # stochastic oscillator
@@ -143,21 +139,33 @@ def get_indicator_list():
      'ht_tr_tp'
      ]
 
+    if not cl:
+        TA_list = filter(TA_list, lambda x: 'cl' not in x)
+
+    if not tp:
+        TA_list = filter(TA_list, lambda x: 'tp' not in x)
+
+    return TA_list
+
 
 def create_tas(bars,
                 verbose=False,
-                ohlcv_cols=['High', 'Low', 'Open', 'Close', 'Volume'],
-                return_df=False):
+                ohlcv_cols=['Adj_High', 'Adj_Low', 'Adj_Open', 'Adj_Close', 'Adj_Volume'],
+                return_df=False,
+                cl=True,
+                tp=True):
     """
     :param bars: resampled pandas dataframe with open, high, low, close, volume, and typical_price columns
     :param verbose: boolean, if true, prints more debug
     :param ohlcv_cols: list of strings; the column names for high, low, open, close, and volume
+    :param cl: use the close price to make TAs
+    :param tp: calcuclate typical price and use it for TAs
 
     :returns: pandas dataframe with TA signals calculated (modifies dataframe in place)
     """
     h, l, o, c, v = ohlcv_cols
-    if 'typical_price' not in bars.columns:
-        bars['typical_price'] = bars[['High', 'Low', 'Close']].mean(axis=1)
+    if 'typical_price' not in bars.columns and tp:
+        bars['typical_price'] = bars[[h, l, c]].mean(axis=1)
 
     # bollinger bands
     # strange bug, if values are small, need to multiply to larger value for some reason
@@ -171,7 +179,9 @@ def create_tas(bars,
     if verbose:
         print('using multiplier of', mult)
 
-    mult_tp = bars['typical_price'].values * mult
+    if tp:
+        mult_tp = bars['typical_price'].values * mult
+
     mult_close = bars[c].values * mult
     mult_open = bars[o].values * mult
     mult_high = bars[h].values * mult
@@ -180,66 +190,80 @@ def create_tas(bars,
 
     ### overlap studies
     # bollinger bands -- should probably put these into another indicator
-    upper_cl, middle_cl, lower_cl = talib.BBANDS(mult_close,
-                                    timeperiod=10,
-                                    nbdevup=2,
-                                    nbdevdn=2)
+    if cl:
+        upper_cl, middle_cl, lower_cl = talib.BBANDS(mult_close,
+                                        timeperiod=10,
+                                        nbdevup=2,
+                                        nbdevdn=2)
 
-    bars['bband_u_cl'] = upper_cl / mult
-    bars['bband_m_cl'] = middle_cl / mult
-    bars['bband_l_cl'] = lower_cl / mult
-    bars['bband_u_cl_diff'] = bars['bband_u_cl'] - bars[c]
-    bars['bband_m_cl_diff'] = bars['bband_m_cl'] - bars[c]
-    bars['bband_l_cl_diff'] = bars['bband_l_cl'] - bars[c]
-    bars['bband_u_cl_diff_hi'] = bars['bband_u_cl'] - bars[h]
-    bars['bband_l_cl_diff_lo'] = bars['bband_l_cl'] - bars[l]
-    # bars['bband_u_cl'].fillna(method='bfill', inplace=True)
-    # bars['bband_m_cl'].fillna(method='bfill', inplace=True)
-    # bars['bband_l_cl'].fillna(method='bfill', inplace=True)
+        bars['bband_u_cl'] = upper_cl / mult
+        bars['bband_m_cl'] = middle_cl / mult
+        bars['bband_l_cl'] = lower_cl / mult
+        bars['bband_u_cl_diff'] = bars['bband_u_cl'] - bars[c]
+        bars['bband_m_cl_diff'] = bars['bband_m_cl'] - bars[c]
+        bars['bband_l_cl_diff'] = bars['bband_l_cl'] - bars[c]
+        bars['bband_u_cl_diff_hi'] = bars['bband_u_cl'] - bars[h]
+        bars['bband_l_cl_diff_lo'] = bars['bband_l_cl'] - bars[l]
+        # bars['bband_u_cl'].fillna(method='bfill', inplace=True)
+        # bars['bband_m_cl'].fillna(method='bfill', inplace=True)
+        # bars['bband_l_cl'].fillna(method='bfill', inplace=True)
 
-    upper_tp, middle_tp, lower_tp = talib.BBANDS(mult_tp,
-                                    timeperiod=10,
-                                    nbdevup=2,
-                                    nbdevdn=2)
+    if tp:
+        upper_tp, middle_tp, lower_tp = talib.BBANDS(mult_tp,
+                                        timeperiod=10,
+                                        nbdevup=2,
+                                        nbdevdn=2)
 
-    bars['bband_u_tp'] = upper_tp / mult
-    bars['bband_m_tp'] = middle_tp / mult
-    bars['bband_l_tp'] = lower_tp / mult
-    bars['bband_u_tp_diff'] = bars['bband_u_tp'] - bars['typical_price']
-    bars['bband_m_tp_diff'] = bars['bband_m_tp'] - bars['typical_price']
-    bars['bband_l_tp_diff'] = bars['bband_l_tp'] - bars['typical_price']
-    bars['bband_u_tp_diff_hi'] = bars['bband_u_tp'] - bars[h]
-    bars['bband_l_tp_diff_lo'] = bars['bband_l_tp'] - bars[l]
-    # think this is already taken care of at the end...check
-    # bars['bband_u_tp'].fillna(method='bfill', inplace=True)
-    # bars['bband_m_tp'].fillna(method='bfill', inplace=True)
-    # bars['bband_l_tp'].fillna(method='bfill', inplace=True)
+        bars['bband_u_tp'] = upper_tp / mult
+        bars['bband_m_tp'] = middle_tp / mult
+        bars['bband_l_tp'] = lower_tp / mult
+        bars['bband_u_tp_diff'] = bars['bband_u_tp'] - bars['typical_price']
+        bars['bband_m_tp_diff'] = bars['bband_m_tp'] - bars['typical_price']
+        bars['bband_l_tp_diff'] = bars['bband_l_tp'] - bars['typical_price']
+        bars['bband_u_tp_diff_hi'] = bars['bband_u_tp'] - bars[h]
+        bars['bband_l_tp_diff_lo'] = bars['bband_l_tp'] - bars[l]
+        # think this is already taken care of at the end...check
+        # bars['bband_u_tp'].fillna(method='bfill', inplace=True)
+        # bars['bband_m_tp'].fillna(method='bfill', inplace=True)
+        # bars['bband_l_tp'].fillna(method='bfill', inplace=True)
 
     # Double Exponential Moving Average
-    bars['dema_cl'] = talib.DEMA(mult_close, timeperiod=30) / mult
-    bars['dema_tp'] = talib.DEMA(mult_tp, timeperiod=30) / mult
-    bars['dema_cl_diff'] = bars['dema_cl'] - bars[c]
-    bars['dema_tp_diff'] = bars['dema_tp'] - bars['typical_price']
+    if cl:
+        bars['dema_cl'] = talib.DEMA(mult_close, timeperiod=30) / mult
+        bars['dema_cl_diff'] = bars['dema_cl'] - bars[c]
+
+    if tp:
+        bars['dema_tp'] = talib.DEMA(mult_tp, timeperiod=30) / mult
+        bars['dema_tp_diff'] = bars['dema_tp'] - bars['typical_price']
 
 
     # exponential moving Average
-    bars['ema_cl'] = talib.EMA(mult_close, timeperiod=30) / mult
-    bars['ema_tp'] = talib.EMA(mult_tp, timeperiod=30) / mult
-    bars['ema_cl_diff'] = bars['ema_cl'] - bars[c]
-    bars['ema_tp_diff'] = bars['ema_tp'] - bars['typical_price']
+    if cl:
+        bars['ema_cl'] = talib.EMA(mult_close, timeperiod=30) / mult
+        bars['ema_cl_diff'] = bars['ema_cl'] - bars[c]
+
+    if tp:
+        bars['ema_tp'] = talib.EMA(mult_tp, timeperiod=30) / mult
+        bars['ema_tp_diff'] = bars['ema_tp'] - bars['typical_price']
 
     # Hilbert Transform - Instantaneous Trendline - like a mva but a bit different, should probably take slope or
     # use in another indicator
-    bars['ht_tl_cl'] = talib.HT_TRENDLINE(mult_close) / mult
-    bars['ht_tl_tp'] = talib.HT_TRENDLINE(mult_tp) / mult
-    bars['ht_tl_cl_diff'] = bars['ht_tl_cl'] - bars[c]
-    bars['ht_tl_tp_diff'] = bars['ht_tl_tp'] - bars['typical_price']
+    if cl:
+        bars['ht_tl_cl'] = talib.HT_TRENDLINE(mult_close) / mult
+        bars['ht_tl_cl_diff'] = bars['ht_tl_cl'] - bars[c]
+
+    if tp:
+        bars['ht_tl_tp'] = talib.HT_TRENDLINE(mult_tp) / mult
+        bars['ht_tl_tp_diff'] = bars['ht_tl_tp'] - bars['typical_price']
 
     # KAMA - Kaufman's Adaptative Moving Average -- need to take slope or something
-    bars['kama_cl'] = talib.KAMA(mult_close, timeperiod=30) / mult
-    bars['kama_tp'] = talib.KAMA(mult_tp, timeperiod=30) / mult
-    bars['kama_cl_diff'] = bars['kama_cl'] - bars[c]
-    bars['kama_tp_diff'] = bars['kama_tp'] - bars['typical_price']
+    if cl:
+        bars['kama_cl'] = talib.KAMA(mult_close, timeperiod=30) / mult
+        bars['kama_cl_diff'] = bars['kama_cl'] - bars[c]
+
+    if tp:
+        bars['kama_tp'] = talib.KAMA(mult_tp, timeperiod=30) / mult
+        bars['kama_tp_diff'] = bars['kama_tp'] - bars['typical_price']
 
     # MESA Adaptive Moving Average -- getting TA_BAD_PARAM error
     # mama_cl, fama_cl = talib.MAMA(mult_close, fastlimit=100, slowlimit=100) / mult
@@ -254,59 +278,84 @@ def create_tas(bars,
     # bars['mama_tp_osc'] = mama_tp_osc
 
     # Moving average with variable period
-    bars['mavp_cl'] = talib.MAVP(mult_close, np.arange(mult_close.shape[0]).astype(np.float64), minperiod=2, maxperiod=30, matype=0) / mult
-    bars['mavp_tp'] = talib.MAVP(mult_tp, np.arange(mult_tp.shape[0]).astype(np.float64), minperiod=2, maxperiod=30, matype=0) / mult
-    bars['mavp_cl_diff'] = bars['mavp_cl'] - bars[c]
-    bars['mavp_tp_diff'] = bars['mavp_tp'] - bars['typical_price']
+    if cl:
+        bars['mavp_cl'] = talib.MAVP(mult_close, np.arange(mult_close.shape[0]).astype(np.float64), minperiod=2, maxperiod=30, matype=0) / mult
+        bars['mavp_cl_diff'] = bars['mavp_cl'] - bars[c]
+
+    if tp:
+        bars['mavp_tp'] = talib.MAVP(mult_tp, np.arange(mult_tp.shape[0]).astype(np.float64), minperiod=2, maxperiod=30, matype=0) / mult
+        bars['mavp_tp_diff'] = bars['mavp_tp'] - bars['typical_price']
 
     # midpoint over period
-    bars['midp_cl'] = talib.MIDPOINT(mult_close, timeperiod=14) / mult
-    bars['midp_tp'] = talib.MIDPOINT(mult_tp, timeperiod=14) / mult
-    bars['midp_cl_diff'] = bars['midp_cl'] - bars[c]
-    bars['midp_tp_diff'] = bars['midp_tp'] - bars['typical_price']
+    if cl:
+        bars['midp_cl'] = talib.MIDPOINT(mult_close, timeperiod=14) / mult
+        bars['midp_cl_diff'] = bars['midp_cl'] - bars[c]
+
+    if tp:
+        bars['midp_tp'] = talib.MIDPOINT(mult_tp, timeperiod=14) / mult
+        bars['midp_tp_diff'] = bars['midp_tp'] - bars['typical_price']
 
     # midpoint price over period
     bars['midpr'] = talib.MIDPRICE(mult_high, mult_low, timeperiod=14) / mult
-    bars['midpr_diff'] = bars['midpr'] - bars['typical_price']
+    if cl:
+        bars['midpr_diff_cl'] = bars['midpr'] - bars[c]
+
+    if tp:
+        bars['midpr_diff_tp'] = bars['midpr'] - bars['typical_price']
+
 
     # parabolic sar
     bars['sar'] = talib.SAR(mult_high, mult_low, acceleration=0.02, maximum=0.2) / mult
-    bars['sar_diff'] = bars['sar'] - bars['typical_price']
+
+    if cl:
+        bars['sar_diff_cl'] = bars['sar'] - bars[c]
+
+    if tp:
+        bars['sar_diff_pt'] = bars['sar'] - bars['typical_price']
     # need to make an oscillator for this
 
     # simple moving average
-    # 10 day
-    bars['sma_10_cl'] = talib.SMA(mult_close, timeperiod=10) / mult
-    bars['sma_10_tp'] = talib.SMA(mult_tp, timeperiod=10) / mult
-    # 20 day
-    bars['sma_20_cl'] = talib.SMA(mult_close, timeperiod=20) / mult
-    bars['sma_20_tp'] = talib.SMA(mult_tp, timeperiod=20) / mult
-    # 30 day
-    bars['sma_30_cl'] = talib.SMA(mult_close, timeperiod=30) / mult
-    bars['sma_30_tp'] = talib.SMA(mult_tp, timeperiod=30) / mult
-    # 40 day
-    bars['sma_40_cl'] = talib.SMA(mult_close, timeperiod=40) / mult
-    bars['sma_40_tp'] = talib.SMA(mult_tp, timeperiod=40) / mult
+    # 10, 20, 30, 40 day
+    if cl:
+        bars['sma_10_cl'] = talib.SMA(mult_close, timeperiod=10) / mult
+        bars['sma_20_cl'] = talib.SMA(mult_close, timeperiod=20) / mult
+        bars['sma_30_cl'] = talib.SMA(mult_close, timeperiod=30) / mult
+        bars['sma_40_cl'] = talib.SMA(mult_close, timeperiod=40) / mult
+
+    if tp:
+        bars['sma_10_tp'] = talib.SMA(mult_tp, timeperiod=10) / mult
+        bars['sma_20_tp'] = talib.SMA(mult_tp, timeperiod=20) / mult
+        bars['sma_30_tp'] = talib.SMA(mult_tp, timeperiod=30) / mult
+        bars['sma_40_tp'] = talib.SMA(mult_tp, timeperiod=40) / mult
 
     # triple exponential moving average
-    bars['tema_cl'] = talib.TEMA(mult_close, timeperiod=30) / mult
-    bars['tema_tp'] = talib.TEMA(mult_tp, timeperiod=30) / mult
-    bars['tema_cl_diff'] = bars['tema_cl'] - bars[c]
-    bars['tema_tp_diff'] = bars['tema_tp'] - bars['typical_price']
+    if cl:
+        bars['tema_cl'] = talib.TEMA(mult_close, timeperiod=30) / mult
+        bars['tema_cl_diff'] = bars['tema_cl'] - bars[c]
+
+    if tp:
+        bars['tema_tp'] = talib.TEMA(mult_tp, timeperiod=30) / mult
+        bars['tema_tp_diff'] = bars['tema_tp'] - bars['typical_price']
 
     # triangular ma
-    bars['trima_cl'] = talib.TRIMA(mult_close, timeperiod=30) / mult
-    bars['trima_tp'] = talib.TRIMA(mult_tp, timeperiod=30) / mult
-    bars['trima_cl_diff'] = bars['trima_cl'] - bars[c]
-    bars['trima_tp_diff'] = bars['trima_tp'] - bars['typical_price']
+    if cl:
+        bars['trima_cl'] = talib.TRIMA(mult_close, timeperiod=30) / mult
+        bars['trima_cl_diff'] = bars['trima_cl'] - bars[c]
+
+    if tp:
+        bars['trima_tp'] = talib.TRIMA(mult_tp, timeperiod=30) / mult
+        bars['trima_tp_diff'] = bars['trima_tp'] - bars['typical_price']
 
     # weighted moving average
-    bars['wma_cl'] = talib.WMA(mult_close, timeperiod=30) / mult
-    bars['wma_tp'] = talib.WMA(mult_tp, timeperiod=30) / mult
-    bars['wma_cl_diff'] = bars['wma_cl'] - bars[c]
-    bars['wma_tp_diff'] = bars['wma_tp'] - bars['typical_price']
+    if cl:
+        bars['wma_cl'] = talib.WMA(mult_close, timeperiod=30) / mult
+        bars['wma_cl_diff'] = bars['wma_cl'] - bars[c]
 
-    #### momentum indicators  -- for now left out those with unstable periods
+    if tp:
+        bars['wma_tp'] = talib.WMA(mult_tp, timeperiod=30) / mult
+        bars['wma_tp_diff'] = bars['wma_tp'] - bars['typical_price']
+
+    #### momentum indicators  -- for now left out some of those with unstable periods (maybe update and included them, not sure)
 
     # Average Directional Movement Index - 0 to 100 I think
     bars['adx'] = talib.ADX(mult_high, mult_low, mult_close, timeperiod=14)
@@ -316,8 +365,11 @@ def create_tas(bars,
 
     # Absolute Price Oscillator
     # values around -100 to +100
-    bars['apo_cl'] = talib.APO(mult_close, fastperiod=12, slowperiod=26, matype=0)
-    bars['apo_tp'] = talib.APO(mult_tp, fastperiod=12, slowperiod=26, matype=0)
+    if cl:
+        bars['apo_cl'] = talib.APO(mult_close, fastperiod=12, slowperiod=26, matype=0)
+
+    if tp:
+        bars['apo_tp'] = talib.APO(mult_tp, fastperiod=12, slowperiod=26, matype=0)
 
     # Aroon and Aroon Oscillator 0-100, so don't need to renormalize
     arup, ardn = talib.AROON(mult_high, mult_low, timeperiod=14)
@@ -335,8 +387,11 @@ def create_tas(bars,
     bars['cci'] = talib.CCI(mult_high, mult_low, mult_close, timeperiod=14)
 
     # Chande Momentum Oscillator
-    bars['cmo_cl'] = talib.CMO(mult_close, timeperiod=14)
-    bars['cmo_tp'] = talib.CMO(mult_tp, timeperiod=14)
+    if cl:
+        bars['cmo_cl'] = talib.CMO(mult_close, timeperiod=14)
+
+    if tp:
+        bars['cmo_tp'] = talib.CMO(mult_tp, timeperiod=14)
 
     # dx - Directional Movement Index
     bars['dx'] = talib.DX(mult_high, mult_low, mult_close, timeperiod=14)
@@ -344,15 +399,17 @@ def create_tas(bars,
     # Moving Average Convergence/Divergence
     # https://www.quantopian.com/posts/how-does-the-talib-compute-macd-why-the-value-is-different
     # macd diff btw fast and slow EMA
-    macd_cl, macdsignal_cl, macdhist_cl = talib.MACD(mult_close, fastperiod=12, slowperiod=26, signalperiod=9)
-    bars['macd_cl'] = macd_cl / mult
-    bars['macdsignal_cl'] = macdsignal_cl / mult
-    bars['macdhist_cl'] = macdhist_cl / mult
+    if cl:
+        macd_cl, macdsignal_cl, macdhist_cl = talib.MACD(mult_close, fastperiod=12, slowperiod=26, signalperiod=9)
+        bars['macd_cl'] = macd_cl / mult
+        bars['macdsignal_cl'] = macdsignal_cl / mult
+        bars['macdhist_cl'] = macdhist_cl / mult
 
-    macd_tp, macdsignal_tp, macdhist_tp = talib.MACD(mult_tp, fastperiod=12, slowperiod=26, signalperiod=9)
-    bars['macd_tp'] = macd_tp / mult
-    bars['macdsignal_tp'] = macdsignal_tp / mult
-    bars['macdhist_tp'] = macdhist_tp / mult
+    if tp:
+        macd_tp, macdsignal_tp, macdhist_tp = talib.MACD(mult_tp, fastperiod=12, slowperiod=26, signalperiod=9)
+        bars['macd_tp'] = macd_tp / mult
+        bars['macdsignal_tp'] = macdsignal_tp / mult
+        bars['macdhist_tp'] = macdhist_tp / mult
 
     # mfi - Money Flow Index
     bars['mfi'] = talib.MFI(mult_high, mult_low, mult_close, bars[v].values, timeperiod=14)
@@ -364,9 +421,12 @@ def create_tas(bars,
     bars['mdm'] = talib.MINUS_DM(mult_high, mult_low, timeperiod=14)
 
     # note: too small of a timeperiod will result in junk data...I think.  or at least very discretized
-    bars['mom_cl'] = talib.MOM(mult_close, timeperiod=14) / mult
+    if cl:
+        bars['mom_cl'] = talib.MOM(mult_close, timeperiod=14) / mult
     # bars['mom_cl'].fillna(method='bfill', inplace=True)
-    bars['mom_tp'] = talib.MOM(mult_tp, timeperiod=14) / mult
+
+    if tp:
+        bars['mom_tp'] = talib.MOM(mult_tp, timeperiod=14) / mult
     # bars['mom_tp'].fillna(method='bfill', inplace=True)
 
     # plus di - Plus Directional Indicator
@@ -376,28 +436,40 @@ def create_tas(bars,
     bars['pldm'] = talib.PLUS_DM(mult_high, mult_low, timeperiod=14)
 
     # percentage price Oscillator
-    bars['ppo_cl'] = talib.PPO(mult_close, fastperiod=12, slowperiod=26, matype=0)
-    bars['ppo_tp'] = talib.PPO(mult_tp, fastperiod=12, slowperiod=26, matype=0)
+    if cl:
+        bars['ppo_cl'] = talib.PPO(mult_close, fastperiod=12, slowperiod=26, matype=0)
 
-    # rate of change
-    bars['roc_cl'] = talib.ROC(mult_close, timeperiod=10)
-    bars['roc_tp'] = talib.ROC(mult_tp, timeperiod=10)
+    if tp:
+        bars['ppo_tp'] = talib.PPO(mult_tp, fastperiod=12, slowperiod=26, matype=0)
+
+    # rate of change -- really only need one
+    # if cl:
+    #     bars['roc_cl'] = talib.ROC(mult_close, timeperiod=10)
+    #
+    # if tp:
+    #     bars['roc_tp'] = talib.ROC(mult_tp, timeperiod=10)
 
     # rocp - Rate of change Percentage: (price-prevPrice)/prevPrice
-    bars['rocp_cl'] = talib.ROCP(mult_close, timeperiod=10)
-    bars['rocp_tp'] = talib.ROCP(mult_tp, timeperiod=10)
+    if cl:
+        bars['rocp_cl'] = talib.ROCP(mult_close, timeperiod=10)
+
+    if tp:
+        bars['rocp_tp'] = talib.ROCP(mult_tp, timeperiod=10)
 
     # rocr - Rate of change ratio: (price/prevPrice)
-    bars['rocr_cl'] = talib.ROCR(mult_close, timeperiod=10)
-    bars['rocr_tp'] = talib.ROCR(mult_tp, timeperiod=10)
-
-    # Rate of change ratio 100 scale: (price/prevPrice)*100
-    bars['rocr_cl_100'] = talib.ROCR100(mult_close, timeperiod=10)
-    bars['rocr_tp_100'] = talib.ROCR100(mult_tp, timeperiod=10)
+    # bars['rocr_cl'] = talib.ROCR(mult_close, timeperiod=10)
+    # bars['rocr_tp'] = talib.ROCR(mult_tp, timeperiod=10)
+    #
+    # # Rate of change ratio 100 scale: (price/prevPrice)*100
+    # bars['rocr_cl_100'] = talib.ROCR100(mult_close, timeperiod=10)
+    # bars['rocr_tp_100'] = talib.ROCR100(mult_tp, timeperiod=10)
 
     # Relative Strength Index
-    bars['rsi_cl'] = talib.RSI(mult_close, timeperiod=14)
-    bars['rsi_tp'] = talib.RSI(mult_tp, timeperiod=14)
+    if cl:
+        bars['rsi_cl'] = talib.RSI(mult_close, timeperiod=14)
+
+    if tp:
+        bars['rsi_tp'] = talib.RSI(mult_tp, timeperiod=14)
 
     # stochastic oscillator - % of price diffs, so no need to rescale
     slowk, slowd = talib.STOCH(mult_high, mult_low, mult_close, fastk_period=5, slowk_period=3, slowk_matype=0, slowd_period=3, slowd_matype=0)
@@ -408,16 +480,22 @@ def create_tas(bars,
     bars['fastd'] = fastd
 
     # Stochastic Relative Strength Index
-    fastk_cl, fastd_cl = talib.STOCHRSI(mult_close, timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0)
-    fastk_tp, fastd_tp = talib.STOCHRSI(mult_tp, timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0)
-    bars['strsi_cl_k'] = fastk_cl
-    bars['strsi_cl_d'] = fastd_cl
-    bars['strsi_tp_k'] = fastk_tp
-    bars['strsi_tp_d'] = fastd_tp
+    if cl:
+        fastk_cl, fastd_cl = talib.STOCHRSI(mult_close, timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0)
+        bars['strsi_cl_k'] = fastk_cl
+        bars['strsi_cl_d'] = fastd_cl
+
+    if tp:
+        fastk_tp, fastd_tp = talib.STOCHRSI(mult_tp, timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0)
+        bars['strsi_tp_k'] = fastk_tp
+        bars['strsi_tp_d'] = fastd_tp
 
     # trix - 1-day Rate-Of-Change (ROC) of a Triple Smooth EMA
-    bars['trix_cl'] = talib.TRIX(mult_close, timeperiod=30)
-    bars['trix_tp'] = talib.TRIX(mult_tp, timeperiod=30)
+    if cl:
+        bars['trix_cl'] = talib.TRIX(mult_close, timeperiod=30)
+
+    if tp:
+        bars['trix_tp'] = talib.TRIX(mult_tp, timeperiod=30)
 
     # ultimate Oscillator - between 0 and 100
     bars['ultosc'] = talib.ULTOSC(mult_high, mult_low, mult_close, timeperiod1=7, timeperiod2=14, timeperiod3=28)
@@ -434,8 +512,11 @@ def create_tas(bars,
     bars['adosc'] = talib.ADOSC(mult_high, mult_low, mult_close, bars[v].values, fastperiod=3, slowperiod=10)
 
     # on balance volume
-    bars['obv_cl'] = talib.OBV(mult_close, bars[v].values)
-    bars['obv_tp'] = talib.OBV(mult_tp, bars[v].values)
+    if cl:
+        bars['obv_cl'] = talib.OBV(mult_close, bars[v].values)
+
+    if tp:
+        bars['obv_tp'] = talib.OBV(mult_tp, bars[v].values)
 
 
     ### volatility indicators
@@ -451,32 +532,47 @@ def create_tas(bars,
 
     ### Cycle indicators
     # Hilbert Transform - Dominant Cycle Period
-    bars['ht_dcp_cl'] = talib.HT_DCPERIOD(mult_close)
-    bars['ht_dcp_tp'] = talib.HT_DCPERIOD(mult_tp)
+    if cl:
+        bars['ht_dcp_cl'] = talib.HT_DCPERIOD(mult_close)
+
+    if tp:
+        bars['ht_dcp_tp'] = talib.HT_DCPERIOD(mult_tp)
 
     # Hilbert Transform - Dominant Cycle Phase
-    bars['ht_dcph_cl'] = talib.HT_DCPHASE(mult_close)
-    bars['ht_dcph_tp'] = talib.HT_DCPHASE(mult_tp)
+    if cl:
+        bars['ht_dcph_cl'] = talib.HT_DCPHASE(mult_close)
+
+    if tp:
+        bars['ht_dcph_tp'] = talib.HT_DCPHASE(mult_tp)
 
     # Hilbert Transform - Phasor Components
-    inphase_cl, quadrature_cl = talib.HT_PHASOR(mult_close)
-    inphase_tp, quadrature_tp = talib.HT_PHASOR(mult_tp)
-    bars['ht_ph_cl'] = inphase_cl
-    bars['ht_ph_tp'] = inphase_tp
-    bars['ht_q_cl'] = quadrature_cl
-    bars['ht_q_tp'] = quadrature_tp
+    if cl:
+        inphase_cl, quadrature_cl = talib.HT_PHASOR(mult_close)
+        bars['ht_ph_cl'] = inphase_cl
+        bars['ht_q_cl'] = quadrature_cl
+
+    if tp:
+        inphase_tp, quadrature_tp = talib.HT_PHASOR(mult_tp)
+        bars['ht_ph_tp'] = inphase_tp
+        bars['ht_q_tp'] = quadrature_tp
 
     # Hilbert Transform - SineWave
-    sine_cl, leadsine_cl = talib.HT_SINE(mult_close)
-    sine_tp, leadsine_tp = talib.HT_SINE(mult_tp)
-    bars['ht_s_cl'] = sine_cl
-    bars['ht_s_tp'] = sine_tp
-    bars['ht_ls_cl'] = leadsine_cl
-    bars['ht_ls_tp'] = leadsine_tp
+    if cl:
+        sine_cl, leadsine_cl = talib.HT_SINE(mult_close)
+        bars['ht_s_cl'] = sine_cl
+        bars['ht_ls_cl'] = leadsine_cl
+
+    if tp:
+        sine_tp, leadsine_tp = talib.HT_SINE(mult_tp)
+        bars['ht_s_tp'] = sine_tp
+        bars['ht_ls_tp'] = leadsine_tp
 
     # Hilbert Transform - Trend vs Cycle Mode
-    bars['ht_tr_cl'] = talib.HT_TRENDMODE(mult_close)
-    bars['ht_tr_tp'] = talib.HT_TRENDMODE(mult_tp)
+    if cl:
+        bars['ht_tr_cl'] = talib.HT_TRENDMODE(mult_close)
+
+    if tp:
+        bars['ht_tr_tp'] = talib.HT_TRENDMODE(mult_tp)
 
 
     bars.fillna(method='bfill', inplace=True)

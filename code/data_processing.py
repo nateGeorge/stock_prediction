@@ -182,11 +182,20 @@ def load_stocks(stocks=None,
                 dict of dataframes merged with finra data (fin_sh)
     """
     print('loading stocks...')
-    dfs = dlq.load_stocks(verbose=verbose, earliest_date=earliest_date)
+    all_stocks_dfs = dlq.load_stocks(verbose=verbose, earliest_date=earliest_date)
+    dfs = {}
+    existing_stocks = set(all_stocks_dfs.keys())
     if stocks is None:
-        ret_stocks = sorted(dfs.keys())  # sometimes some stocks are not in there
-    else:
-        ret_stocks = stocks
+        stocks = existing_stocks
+
+    for s in stocks:
+        if s in existing_stocks:
+            dfs[s] = all_stocks_dfs[s]
+        else:
+            if verbose:
+                print('stock', s, 'not in quandl data!')
+
+    ret_stocks = sorted(dfs.keys())  # sometimes some stocks are not in there
 
     jobs = []
     if TAs:

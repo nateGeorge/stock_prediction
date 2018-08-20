@@ -158,7 +158,7 @@ indicators = ['bband_u_cl', # bollinger bands
 big_data_home_dir = '/media/nate/data_lake/stock_data/'
 
 
-def load_stocks(stocks=['NAVI', 'EXAS'],
+def load_stocks(stocks=None,
                 TAs=True,
                 finra_shorts=True,
                 short_interest=True,
@@ -168,7 +168,7 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
                 TAfunc='create_tas',
                 calc_scores=True):
     """
-    :param stocks: list of strings; tickers (must be caps)
+    :param stocks: list of strings; tickers (must be caps), if None, will use all stocks possible
     :param TAs: boolean, if true, calculates technical indicators
     :param shorts: boolean, if true, adds all short data
     :param verbose: boolean, prints more debug if true
@@ -183,7 +183,10 @@ def load_stocks(stocks=['NAVI', 'EXAS'],
     """
     print('loading stocks...')
     dfs = dlq.load_stocks(verbose=verbose, earliest_date=earliest_date)
-    ret_stocks = sorted(dfs.keys())  # sometimes some stocks are not in there
+    if stocks is None:
+        ret_stocks = sorted(dfs.keys())  # sometimes some stocks are not in there
+    else:
+        ret_stocks = stocks
 
     jobs = []
     if TAs:
@@ -615,6 +618,8 @@ def make_nn_data(sh_int, hist_points=40, future=10, test_frac=0.15, make_fresh=F
     # need to do this in chunks and save it
     # break into 2 chunks
     # uses about 16GB of memory per chunk
+
+    # only uses stocks with short data
     sh_int_stocks = sorted(sh_int.keys())
     targ_col = str(future) + '_day_price_diff_pct'
     feat_cols = sorted(set(sh_int[sh_int_stocks[0]].columns).difference(set([str(future) + '_day_price_diff', targ_col])))
@@ -774,6 +779,7 @@ def calc_score(df, penalty=True):
 
 if __name__ == "__main__":
     pass
+    # dfs, sh_int, fin_sh = load_stocks(stocks=None, finra_shorts=False, short_interest=False, verbose=True)
     # short_stocks = sse.get_stocks()
     # dfs, sh_int, fin_sh = load_stocks(stocks=short_stocks, verbose=True)
     # future = 10

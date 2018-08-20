@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # custom
 import data_processing as dp
 
-dfs, sh_int, fin_sh = dp.load_stocks(stocks=None, TAs=False, finra_shorts=False, short_interest=False, earlist_date=None)
+dfs, sh_int, fin_sh = dp.load_stocks(stocks=None, TAs=False, finra_shorts=False, short_interest=False, earliest_date=None)
 
 # full_df = pd.concat([dfs[s] for s in dfs.keys()])
 stocks = ['LNG', 'CHK', 'AMD']

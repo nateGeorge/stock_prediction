@@ -152,6 +152,88 @@ def short_squeeze_analysis(all_sh_stocks_df, ticker='TDOC'):
 
 ticker_groups, larger_shorts, short_stocks = make_larger_shorts(all_sh_stocks_df)
 
+
+
+#### analysis that needs to be automated/put into dashboard
+
+#0 AEP - no correlation, AER - slight correlation, AERI -- complicated, EXAS - year long short squeeze
+#1 AAMC great example of short squeeze - 4 month period
+#2 AAOI -- potential
+#2 AAXN another great example -- looks like a large margin call (tazers) - days to cover was in 30s
+#3 ABAX, similar to AAXN and almost same time -- was a big earnings surprise I think (blood analysis) -- days to cover was in 40s
+#4 ABEO - prices keep going up as do shorts? -- could be a short squeeze if earnings improves significantly
+#5 any news on the horizon for anything promising?  how to automate this with text analytics?
+#6 ABG - weak shorting
+#7 ACAD - pretty good short squeeze in 2017
+#8 ACHC - long squeeze, actually kind of a pile-on
+#9 ACHN - another long squeeze
+#10 ACIA - slowly dying long squeeze
+# DAVE also an example
+ticker = short_stocks[3]
+ticker = 'SRPT'
+print(ticker)
+print(larger_shorts.loc[ticker])
+short_squeeze_analysis(all_sh_stocks_full_df, ticker=ticker)
+
+# detect current short-squeezers -- look for increasing price (rocr positive on close EMA, and rocr negative on Short %), as well as high days to cover
+# may not work well -- with all_sh_stocks_df, allows some backtesting -- didn't work well for VHC.  probably need stronger rocr_cl_100
+# setup autodetection with these
+
+# first group by ticker, keep relevant columns, and get latest data point
+ticker_groups = all_sh_stocks_full_df[['ticker', 'Short_%_of_Float', 'Days_to_Cover', 'rocp_cl', 'short_%_rocr_20d', 'short_close_corr_rocr_20d']].groupby('ticker').tail(1)
+ticker_groups.set_index('ticker', inplace=True)
+# all of these next things filter for large short float and days to cover, as well as increasing price
+
+# threshold settings
+short_thresh = 10
+dtc_thresh = 5
+rocp_cl_thresh = 0.04
+
+# find stocks with large short float and days to cover, increasing price, and decreasing short interest
+ticker_groups[(ticker_groups['Short_%_of_Float'] > short_thresh) & (ticker_groups['Days_to_Cover'] > dtc_thresh) & (ticker_groups['rocp_cl'] > rocp_cl_thresh) & (ticker_groups['short_%_rocr_20d'] < 95)]
+
+# sort by days to cover -- doesn't seem to work well
+ticker_groups[(ticker_groups['Short_%_of_Float'] > short_thresh) & (ticker_groups['Days_to_Cover'] > dtc_thresh) & (ticker_groups['rocp_cl'] > rocp_cl_thresh)].sort_values(by='Days_to_Cover')
+# sort by price change
+ticker_groups[(ticker_groups['Short_%_of_Float'] > short_thresh) & (ticker_groups['Days_to_Cover'] > dtc_thresh) & (ticker_groups['rocp_cl'] > rocp_cl_thresh)].sort_values(by='rocp_cl')
+# sort by short % change
+ticker_groups[(ticker_groups['Short_%_of_Float'] > short_thresh) & (ticker_groups['Days_to_Cover'] > dtc_thresh) & (ticker_groups['rocp_cl'] > rocp_cl_thresh)].sort_values(by='short_%_rocr_20d')
+# sort by correlation between price change and short % change
+ticker_groups[(ticker_groups['Short_%_of_Float'] > short_thresh) & (ticker_groups['Days_to_Cover'] > dtc_thresh) & (ticker_groups['rocp_cl'] > rocp_cl_thresh)].sort_values(by='short_close_corr_rocr_20d')
+# sort by price change with all price changes (not just positive)
+ticker_groups[(ticker_groups['Short_%_of_Float'] > short_thresh) & (ticker_groups['Days_to_Cover'] > dtc_thresh)].sort_values(by='rocp_cl')
+# sort by short % change with all positive price changes
+ticker_groups[(ticker_groups['Short_%_of_Float'] > short_thresh) & (ticker_groups['Days_to_Cover'] > dtc_thresh) & (ticker_groups['rocp_cl'] > 0)].sort_values(by='short_%_rocr_20d')
+
+# detect short squeezes based on correlation being around for a few days, in combo with high days to cover
+test_corr = all_sh_stocks_df[(all_sh_stocks_df['short_close_corr_10d_EMA'] < -0.7) & (all_sh_stocks_df['Days_to_Cover'] > 10)]
+
+# find historical short squeezes
+# correlation detection active, plus shorts going down, plus price going up.
+ss = all_sh_stocks_df[(all_sh_stocks_df['Short_%_negative_corr_detection'] == 1) & (all_sh_stocks_df['short_%_rocr_20d'] <= 100)]# & (all_sh_stocks_df['rocp_cl'] >= 0)]
+
+# plot some contiguous stretches
+tickers = ss['ticker'].unique().tolist()
+
+random_ticker = np.random.choice(tickers)
+print(random_ticker)
+df = ss[ss['ticker'] == random_ticker]
+df[['short_close_corr_10d_EMA', 'Short_%_negative_corr_detection', 'Adj_Close', 'Short_%_of_Float_10d_EMA', 'Days_to_Cover', 'short_%_rocr_20d', 'rocp_cl']].plot(subplots=True)
+plt.show()
+
+
+for s in all_sh_stocks_df['ticker'].unique():
+    df = all_sh_stocks_df[all_sh_stocks_df['ticker'] == s]
+    # only get negative correlation with positive price change
+    ss = df[(df['Short_%_negative_corr_detection'] == 1) & (df['short_%_rocr_20d'] <= 0) & (df['rocp_cl'] >= 0)]
+
+
+
+
+
+
+
+##### examine correlations between price changes and short info
 # still 2 million datapoints, so going to sample down...
 sample = shorts_nona.sample(20000)
 ticker = 'AAPL'
@@ -210,58 +292,13 @@ plt.xlim([500000, 1000000000])
 plt.show()
 
 
-#0 AEP - no correlation, AER - slight correlation, AERI -- complicated, EXAS - year long short squeeze
-#1 AAMC great example of short squeeze - 4 month period
-#2 AAOI -- potential
-#2 AAXN another great example -- looks like a large margin call (tazers) - days to cover was in 30s
-#3 ABAX, similar to AAXN and almost same time -- was a big earnings surprise I think (blood analysis) -- days to cover was in 40s
-#4 ABEO - prices keep going up as do shorts? -- could be a short squeeze if earnings improves significantly
-#5 any news on the horizon for anything promising?  how to automate this with text analytics?
-#6 ABG - weak shorting
-#7 ACAD - pretty good short squeeze in 2017
-#8 ACHC - long squeeze, actually kind of a pile-on
-#9 ACHN - another long squeeze
-#10 ACIA - slowly dying long squeeze
-# DAVE also an example
-ticker = short_stocks[3]
-ticker = 'WING'
-print(ticker)
-print(larger_shorts.loc[ticker])
-short_squeeze_analysis(all_sh_stocks_full_df, ticker=ticker)
-
-# detect current short-squeezers -- look for increasing price (rocr positive on close EMA, and rocr negative on Short %), as well as high days to cover
-# may not work well -- with all_sh_stocks_df, allows some backtesting -- didn't work well for VHC.  probably need stronger rocr_cl_100
-# setup autodetection with these
-ticker_groups = all_sh_stocks_full_df[['ticker', 'Short_%_of_Float', 'Days_to_Cover', 'rocp_cl', 'short_%_rocr_20d', 'short_close_corr_rocr_20d']].groupby('ticker').tail(1)
-ticker_groups[(ticker_groups['Short_%_of_Float'] > 10) & (ticker_groups['Days_to_Cover'] > 10) & (ticker_groups['rocp_cl'] > .10) & (ticker_groups['short_%_rocr_20d'] < 95)]
-ticker_groups[(ticker_groups['Short_%_of_Float'] > 10) & (ticker_groups['Days_to_Cover'] > 10) & (ticker_groups['rocp_cl'] > .05)].sort_values(by='Days_to_Cover')
-ticker_groups[(ticker_groups['Short_%_of_Float'] > 10) & (ticker_groups['Days_to_Cover'] > 10) & (ticker_groups['rocp_cl'] > .05)].sort_values(by='rocp_cl')
-ticker_groups[(ticker_groups['Short_%_of_Float'] > 10) & (ticker_groups['Days_to_Cover'] > 10) & (ticker_groups['rocp_cl'] > .05)].sort_values(by='short_%_rocr_20d')
-ticker_groups[(ticker_groups['Short_%_of_Float'] > 10) & (ticker_groups['Days_to_Cover'] > 10)].sort_values(by='rocp_cl')
-ticker_groups[(ticker_groups['Short_%_of_Float'] > 10) & (ticker_groups['Days_to_Cover'] > 10) & (ticker_groups['rocp_cl'] > .05)].sort_values(by='short_close_corr_rocr_20d')
+##### end of correlation analysis
 
 
-# detect short squeezes based on correlation being around for a few days, in combo with high days to cover
-test_corr = all_sh_stocks_df[(all_sh_stocks_df['short_close_corr_10d_EMA'] < -0.7) & (all_sh_stocks_df['Days_to_Cover'] > 10)]
-
-# find historical short squeezes
-# correlation detection active, plus shorts going down, plus price going up.
-ss = all_sh_stocks_df[(all_sh_stocks_df['Short_%_negative_corr_detection'] == 1) & (all_sh_stocks_df['short_%_rocr_20d'] <= 100)]# & (all_sh_stocks_df['rocp_cl'] >= 0)]
-
-# plot some contiguous stretches
-tickers = ss['ticker'].unique().tolist()
-
-random_ticker = np.random.choice(tickers)
-print(random_ticker)
-df = ss[ss['ticker'] == random_ticker]
-df[['short_close_corr_10d_EMA', 'Short_%_negative_corr_detection', 'Adj_Close', 'Short_%_of_Float_10d_EMA', 'Days_to_Cover', 'short_%_rocr_20d', 'rocp_cl']].plot(subplots=True)
-plt.show()
 
 
-for s in all_sh_stocks_df['ticker'].unique():
-    df = all_sh_stocks_df[all_sh_stocks_df['ticker'] == s]
-    # only get negative correlation with positive price change
-    ss = df[(df['Short_%_negative_corr_detection'] == 1) & (df['short_%_rocr_20d'] <= 0) & (df['rocp_cl'] >= 0)]
+
+
 
 
 

@@ -434,12 +434,15 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
                 eod_filename='EOD_{}.h5',
                 latest_eod=None,
                 verbose=False,
-                earliest_date=None):
+                earliest_date=None,
+                only_current_stocks=True):
     """
     :param datapath: string; path to stock datafiles
     :param make_files: bool, will save individual stock file if true (loading full dataset is quite slow)
     :param eod_datapath: string, path to full eod data
     :param latest_eod: string, yyyymmdd; latest day eod data was collected
+
+    :param only_current_stocks: boolean, if true, only returns stocks that are currently being traded
 
     :returns: dictionary of dataframes with tickers as keys
     """
@@ -456,10 +459,17 @@ def load_stocks(datapath=HOME_DIR + 'stockdata/',
     dfs = {}
     # load big df with everything, and load all stocks
     full_df = pd.read_hdf(eod_datapath, names=HEADERS)
+    if only_current_stocks:
+        latest_date = full_df.index.max()
     tickers = set(full_df['Ticker'])
     stk_grps = full_df.groupby(by='Ticker')
     for t in tickers:
-        dfs[t] = stk_grps.get_group(t)
+        st_df = stk_grps.get_group(t)
+        if only_current_stocks:
+            if st_df.index.max() == latest_date:
+                dfs[t] = st_df
+        else:
+            dfs[t] = st_df
 
     # was doing this before but I think I don't have to...
     # jobs = []

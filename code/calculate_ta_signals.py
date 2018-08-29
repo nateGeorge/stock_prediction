@@ -155,6 +155,8 @@ def create_tas(bars,
                 cl=True,
                 tp=True):
     """
+    This is basically set up for daily stock data.  Other time frames would need adapting probably.
+
     :param bars: resampled pandas dataframe with open, high, low, close, volume, and typical_price columns
     :param verbose: boolean, if true, prints more debug
     :param ohlcv_cols: list of strings; the column names for high, low, open, close, and volume
@@ -186,7 +188,13 @@ def create_tas(bars,
     mult_open = bars[o].values * mult
     mult_high = bars[h].values * mult
     mult_low = bars[l].values * mult
+    # for IB data, the volume is integer, but needs to be float for talib
+    volume = bars[v].astype('float').values
 
+
+    # ADR - average daily range
+    # http://forextraininggroup.com/using-adr-average-daily-range-find-short-term-trading-opportunities/
+    # TODO
 
     ### overlap studies
     # bollinger bands -- should probably put these into another indicator
@@ -311,7 +319,7 @@ def create_tas(bars,
         bars['sar_diff_cl'] = bars['sar'] - bars[c]
 
     if tp:
-        bars['sar_diff_pt'] = bars['sar'] - bars['typical_price']
+        bars['sar_diff_tp'] = bars['sar'] - bars['typical_price']
     # need to make an oscillator for this
 
     # simple moving average
@@ -358,7 +366,8 @@ def create_tas(bars,
     #### momentum indicators  -- for now left out some of those with unstable periods (maybe update and included them, not sure)
 
     # Average Directional Movement Index - 0 to 100 I think
-    bars['adx'] = talib.ADX(mult_high, mult_low, mult_close, timeperiod=14)
+    bars['adx_14'] = talib.ADX(mult_high, mult_low, mult_close, timeperiod=14)
+    bars['adx_5'] = talib.ADX(mult_high, mult_low, mult_close, timeperiod=5)
 
     # Average Directional Movement Index Rating
     bars['adxr'] = talib.ADXR(mult_high, mult_low, mult_close, timeperiod=14)
@@ -412,7 +421,7 @@ def create_tas(bars,
         bars['macdhist_tp'] = macdhist_tp / mult
 
     # mfi - Money Flow Index
-    bars['mfi'] = talib.MFI(mult_high, mult_low, mult_close, bars[v].values, timeperiod=14)
+    bars['mfi'] = talib.MFI(mult_high, mult_low, mult_close, volume, timeperiod=14)
 
     # minus di - Minus Directional Indicator
     bars['mdi'] = talib.MINUS_DI(mult_high, mult_low, mult_close, timeperiod=14)
@@ -436,11 +445,13 @@ def create_tas(bars,
     bars['pldm'] = talib.PLUS_DM(mult_high, mult_low, timeperiod=14)
 
     # percentage price Oscillator
+    # matype explanation: https://www.quantopian.com/posts/moving-averages
     if cl:
-        bars['ppo_cl'] = talib.PPO(mult_close, fastperiod=12, slowperiod=26, matype=0)
+        bars['ppo_cl'] = talib.PPO(mult_close, fastperiod=12, slowperiod=26, matype=1)
+        bars['ppo_cl_signal'] = talib.EMA(bars['ppo_cl'].bfill().values, timeperiod=9)
 
     if tp:
-        bars['ppo_tp'] = talib.PPO(mult_tp, fastperiod=12, slowperiod=26, matype=0)
+        bars['ppo_tp'] = talib.PPO(mult_tp, fastperiod=12, slowperiod=26, matype=1)
 
     # rate of change -- really only need one
     # if cl:
@@ -466,7 +477,8 @@ def create_tas(bars,
 
     # Relative Strength Index
     if cl:
-        bars['rsi_cl'] = talib.RSI(mult_close, timeperiod=14)
+        bars['rsi_cl_14'] = talib.RSI(mult_close, timeperiod=14)
+        bars['rsi_cl_5'] = talib.RSI(mult_close, timeperiod=5)
 
     if tp:
         bars['rsi_tp'] = talib.RSI(mult_tp, timeperiod=14)
@@ -492,7 +504,16 @@ def create_tas(bars,
 
     # trix - 1-day Rate-Of-Change (ROC) of a Triple Smooth EMA
     if cl:
-        bars['trix_cl'] = talib.TRIX(mult_close, timeperiod=30)
+        if bars.shape[0] > 90:
+            bars['trix_cl_30'] = talib.TRIX(mult_close, timeperiod=30)
+            bars['trix_cl_30_signal'] = talib.EMA(bars['trix_cl_30'].bfill().values, timeperiod=20)
+
+        bars['trix_cl_14'] = talib.TRIX(mult_close, timeperiod=14)
+        bars['trix_cl_14_signal'] = talib.EMA(bars['trix_cl_14'].bfill().values, timeperiod=9)
+        bars['trix_cl_12'] = talib.TRIX(mult_close, timeperiod=12)
+        bars['trix_cl_12_signal'] = talib.EMA(bars['trix_cl_12'].bfill().values, timeperiod=9)
+        bars['trix_cl_5'] = talib.TRIX(mult_close, timeperiod=5)
+        bars['trix_cl_5_signal'] = talib.EMA(bars['trix_cl_5'].bfill().values, timeperiod=3)
 
     if tp:
         bars['trix_tp'] = talib.TRIX(mult_tp, timeperiod=30)
@@ -506,25 +527,29 @@ def create_tas(bars,
 
     ### volume indicators
     # Chaikin A/D Line
-    bars['ad'] = talib.AD(mult_high, mult_low, mult_close, bars[v].values)
+    bars['ad'] = talib.AD(mult_high, mult_low, mult_close, volume)
 
     # Chaikin A/D Oscillator
-    bars['adosc'] = talib.ADOSC(mult_high, mult_low, mult_close, bars[v].values, fastperiod=3, slowperiod=10)
+    bars['adosc'] = talib.ADOSC(mult_high, mult_low, mult_close, volume, fastperiod=3, slowperiod=10)
 
     # on balance volume
     if cl:
-        bars['obv_cl'] = talib.OBV(mult_close, bars[v].values)
-
+        bars['obv_cl'] = talib.OBV(mult_close, volume)
+        bars['obv_cl_ema_14'] = talib.EMA(bars['obv_cl'].values, timeperiod=14)
     if tp:
-        bars['obv_tp'] = talib.OBV(mult_tp, bars[v].values)
+        bars['obv_tp'] = talib.OBV(mult_tp, volume)
 
 
     ### volatility indicators
     # average true range
-    bars['atr'] = talib.ATR(mult_high, mult_low, mult_close, timeperiod=14)
+    # Large or increasing ranges suggest traders prepared to continue to bid up or sell down a stock through the course of the day. Decreasing range suggests waning interest.
+    # https://en.wikipedia.org/wiki/Average_true_range
+    bars['atr_14'] = talib.ATR(mult_high, mult_low, mult_close, timeperiod=14)
+    bars['atr_5'] = talib.ATR(mult_high, mult_low, mult_close, timeperiod=5)
 
     # Normalized Average True Range
-    bars['natr'] = talib.NATR(mult_high, mult_low, mult_close, timeperiod=14)
+    bars['natr_14'] = talib.NATR(mult_high, mult_low, mult_close, timeperiod=14)
+    bars['natr_5'] = talib.NATR(mult_high, mult_low, mult_close, timeperiod=5)
 
     # true range
     bars['trange'] = talib.TRANGE(mult_high, mult_low, mult_close) / mult

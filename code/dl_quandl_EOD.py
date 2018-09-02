@@ -19,7 +19,7 @@ import pandas_market_calendars as mcal
 import pytz
 
 # custom
-from utils import get_home_dir
+from file_utils import get_home_dir
 
 
 DEFAULT_STORAGE = '/home/nate/Dropbox/data/eod_data/'

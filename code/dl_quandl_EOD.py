@@ -91,8 +91,7 @@ def download_entire_db(storage_path=DEFAULT_STORAGE,
     """
     # first check if we have the latest data
     if not os.path.exists(storage_path):
-        fullpath = ''
-        splitpath = storage_path.split('/')
+        splitpath = storage_path.split('/')[1:]  # first entry is blank due to home dir /
         for i, p in enumerate(splitpath, 1):
             path = '/'.join(splitpath[:i])
             if not os.path.exists(path):
@@ -165,9 +164,15 @@ def daily_download_entire_db(storage_path=DEFAULT_STORAGE):
     latest_db_date = get_latest_db_date()
     while True:
         latest_close_date = get_latest_close_date()
+        if latest_db_date is None:
+            print('no database file exists, downloading...')
+            latest_db_date = download_entire_db(return_latest_date=True)
+            continue
+
         today_utc = pd.to_datetime('now')
         today_ny = datetime.datetime.now(pytz.timezone('America/New_York'))
         pd_today_ny = pd.to_datetime(today_ny.date())
+
         if latest_db_date.date() != latest_close_date.date():
             if (latest_close_date.date() - latest_db_date.date()) >= pd.Timedelta('1D'):
                 if today_utc.hour > latest_close_date.hour:

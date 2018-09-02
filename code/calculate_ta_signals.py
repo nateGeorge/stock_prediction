@@ -544,6 +544,8 @@ def create_tas(bars,
     # average true range
     # Large or increasing ranges suggest traders prepared to continue to bid up or sell down a stock through the course of the day. Decreasing range suggests waning interest.
     # https://en.wikipedia.org/wiki/Average_true_range
+    bars['atr_65'] = talib.ATR(mult_high, mult_low, mult_close, timeperiod=65)
+    bars['atr_20'] = talib.ATR(mult_high, mult_low, mult_close, timeperiod=20)
     bars['atr_14'] = talib.ATR(mult_high, mult_low, mult_close, timeperiod=14)
     bars['atr_5'] = talib.ATR(mult_high, mult_low, mult_close, timeperiod=5)
 

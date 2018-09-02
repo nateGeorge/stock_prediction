@@ -22,7 +22,7 @@ import pytz
 from utils import get_home_dir
 
 
-DEFAULT_STORAGE = '/home/nate/eod_data/'
+DEFAULT_STORAGE = '/home/nate/Dropbox/data/eod_data/'
 # get todays date for checking if files up-to-date
 MTN = timezone('America/Denver')
 TODAY = datetime.datetime.now(MTN)

@@ -433,8 +433,7 @@ def make_small_df(storage_path=DEFAULT_STORAGE,
     full_df.to_hdf(new_filename, key='data', complib='blosc', complevel=9)
 
 
-def load_stocks(datapath=HOME_DIR + 'stockdata/',
-                make_files=False,
+def load_stocks(make_files=False,
                 eod_datapath=DEFAULT_STORAGE,
                 eod_filename='EOD_{}.h5',
                 latest_eod=None,

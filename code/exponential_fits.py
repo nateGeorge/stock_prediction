@@ -156,20 +156,44 @@ class calc_exp_fits:
         return rank_score
 
 
-
+# return multiple values from a rolling operation
+# https://stackoverflow.com/a/39064656/4549682
 calc_fits = calc_exp_fits()
+# get slope from 4 days' points
 n = 4
 rank_score = qqq['Adj_Close'].rolling(n).apply(lambda x: calc_fits.fit_linear_series(x, points=n), raw=True)
 rank_score = rank_score.to_frame()
 rank_score.columns = ['rank_score']
 nan_pad = [np.nan] * (n - 1)
-rank_score['r2'] = nan_pad + calc_fits.r2
+rank_score['4d_r2'] = nan_pad + calc_fits.r2
 rank_score['ann_slope'] = nan_pad + calc_fits.annualized_slope
-rank_score['slope'] = nan_pad + calc_fits.slope
+rank_score['4d_slope'] = nan_pad + calc_fits.slope
 rank_score['Adj_Close'] = qqq['Adj_Close']
 rank_score['close_pct_chg'] = rank_score['Adj_Close'].pct_change()
 rank_score['1d_future_pct_chg'] = rank_score['close_pct_chg'].shift(-1)
+rank_score['3d_future_pct_chg'] = rank_score['close_pct_chg'].shift(-3)
+rank_score['5d_future_pct_chg'] = rank_score['close_pct_chg'].shift(-5)
 rank_score['4d_1d_autocorr'] = qqq['Adj_Close'].rolling(4).apply(lambda x: pd.Series(x).autocorr(), raw=True)
+rank_score['4d_2d_autocorr'] = qqq['Adj_Close'].rolling(4).apply(lambda x: pd.Series(x).autocorr(2), raw=True)
+# minimum of n + 2 for autocorr rolling period (somehow)
+rank_score['5d_3d_autocorr'] = qqq['Adj_Close'].rolling(5).apply(lambda x: pd.Series(x).autocorr(3), raw=True)
+rank_score['6d_4d_autocorr'] = qqq['Adj_Close'].rolling(6).apply(lambda x: pd.Series(x).autocorr(4), raw=True)
 # TODO: try ML model
+rank_score.corr()
 
-c2 = qqq['Adj_Close'].rolling(4).apply(lambda x: fit_exponential_curve_series(x, 4))
+# make train/test
+feat_cols = ['4d_r2', '4d_slope', 'close_pct_chg', '4d_1d_autocorr', '5d_3d_autocorr']
+targ_cols = ['1d_future_pct_chg', '3d_future_pct_chg', '5d_future_pct_chg']
+nona = rank_score.dropna()
+train_idx = int(rank_score.shape[0] * 0.75)
+train_x = nona.iloc[:train_idx][feat_cols]
+train_y = nona.iloc[:train_idx][targ_cols]
+test_x = nona.iloc[train_idx:][feat_cols]
+test_y = nona.iloc[train_idx:][targ_cols]
+
+from sklearn.ensemble import RandomForestRegressor
+rfr = RandomForestRegressor(n_estimators=500, max_depth=5, random_state=42, n_jobs=-1)
+
+rfr.fit(train_x, train_y)
+print(rfr.score(train_x, train_y))
+print(rfr.score(test_x, test_y))

@@ -62,33 +62,7 @@ def fit_exponential_curve(df, points=90, plot_fit=False):
     return annualized_slope, r2, rank_score
 
 
-stocks = dlq.load_stocks()
-qqq = stocks['QQQ']
-tqqq = stocks['TQQQ']
-
-# test if can fit negative trends
-tqqq_abbrev = tqqq.loc[:'2018-3-23']
-ann_sl, r2, rs = fit_exponential_curve(tqqq_abbrev, 3, plot_fit=True)
-
-# c1 = pd.rolling_apply(tqqq['Adj_Close'], 7, lambda x: pd.Series(x).autocorr(1))
-
-# "trends" will be series of autocorrelations over a certain threshold
-# 4 days seems to be shortest possible -- 3 days is always +1 or -1
-c2 = qqq['Adj_Close'].rolling(4).apply(lambda x: pd.Series(x).autocorr(), raw=True)
-c2.hist()
-plt.show()
-c2.plot()
-plt.show()
-
-
-c2 = qqq['Adj_Close'].rolling(9).apply(lambda x: pd.Series(x).autocorr(), raw=True)
-c2.hist()
-plt.show()
-c2.plot()
-plt.show()
-
-
-class calc_exp_fits:
+class calc_fits:
     def __init__(self):
         self.slope = []
         self.annualized_slope = []
@@ -146,7 +120,7 @@ class calc_exp_fits:
         # equation: y = mx + b
         preds = coefs[0] * X + coefs[1]
 
-        annualized_slope = (slope) ** 251  # making this an odd number makes the sign remain the same
+        annualized_slope = np.sign(slope) * (slope) ** 252
         r2 = r2_score(series, preds)
         rank_score = annualized_slope * r2
 
@@ -156,44 +130,103 @@ class calc_exp_fits:
         return rank_score
 
 
-# return multiple values from a rolling operation
-# https://stackoverflow.com/a/39064656/4549682
-calc_fits = calc_exp_fits()
-# get slope from 4 days' points
-n = 4
-rank_score = qqq['Adj_Close'].rolling(n).apply(lambda x: calc_fits.fit_linear_series(x, points=n), raw=True)
-rank_score = rank_score.to_frame()
-rank_score.columns = ['rank_score']
-nan_pad = [np.nan] * (n - 1)
-rank_score['4d_r2'] = nan_pad + calc_fits.r2
-rank_score['ann_slope'] = nan_pad + calc_fits.annualized_slope
-rank_score['4d_slope'] = nan_pad + calc_fits.slope
-rank_score['Adj_Close'] = qqq['Adj_Close']
-rank_score['close_pct_chg'] = rank_score['Adj_Close'].pct_change()
-rank_score['1d_future_pct_chg'] = rank_score['close_pct_chg'].shift(-1)
-rank_score['3d_future_pct_chg'] = rank_score['close_pct_chg'].shift(-3)
-rank_score['5d_future_pct_chg'] = rank_score['close_pct_chg'].shift(-5)
-rank_score['4d_1d_autocorr'] = qqq['Adj_Close'].rolling(4).apply(lambda x: pd.Series(x).autocorr(), raw=True)
-rank_score['4d_2d_autocorr'] = qqq['Adj_Close'].rolling(4).apply(lambda x: pd.Series(x).autocorr(2), raw=True)
-# minimum of n + 2 for autocorr rolling period (somehow)
-rank_score['5d_3d_autocorr'] = qqq['Adj_Close'].rolling(5).apply(lambda x: pd.Series(x).autocorr(3), raw=True)
-rank_score['6d_4d_autocorr'] = qqq['Adj_Close'].rolling(6).apply(lambda x: pd.Series(x).autocorr(4), raw=True)
-# TODO: try ML model
-rank_score.corr()
+def get_fits(df, col='Adj_Close', n_s=[5, 10, 15, 20, 60]):
+    """
+    calculates linear fits to
+    """
+    # return multiple values from a rolling operation
+    # https://stackoverflow.com/a/39064656/4549682
+    # get slope from 4 days' points
+    rank_score = pd.DataFrame()
+    for n in n_s:
+        calc_ = calc_fits()
+        rank_score_temp = df[col].rolling(n).apply(lambda x: calc_.fit_linear_series(x, points=n), raw=True)
+        rank_score_temp = rank_score_temp.to_frame()
+        rank_score_temp.columns = ['{}d_rank_score'.format(n)]
+        nan_pad = [np.nan] * (n - 1)
+        rank_score_temp['{}d_r2'.format(n)] = nan_pad + calc_.r2
+        rank_score_temp['{}d_ann_slope'.format(n)] = nan_pad + calc_.annualized_slope
+        rank_score_temp['{}d_slope'.format(n)] = nan_pad + calc_.slope
+        rank_score = pd.concat([rank_score, rank_score_temp], axis=1)  # concats along columns
 
-# make train/test
-feat_cols = ['4d_r2', '4d_slope', 'close_pct_chg', '4d_1d_autocorr', '5d_3d_autocorr']
-targ_cols = ['1d_future_pct_chg', '3d_future_pct_chg', '5d_future_pct_chg']
-nona = rank_score.dropna()
-train_idx = int(rank_score.shape[0] * 0.75)
-train_x = nona.iloc[:train_idx][feat_cols]
-train_y = nona.iloc[:train_idx][targ_cols]
-test_x = nona.iloc[train_idx:][feat_cols]
-test_y = nona.iloc[train_idx:][targ_cols]
+    rank_score['Adj_Close'] = df['Adj_Close']
+    rank_score['close_pct_chg'] = rank_score[col].pct_change()
+    rank_score = get_future_pct_chgs(rank_score)
+    rank_score = get_autocorrs(rank_score)
 
-from sklearn.ensemble import RandomForestRegressor
-rfr = RandomForestRegressor(n_estimators=500, max_depth=5, random_state=42, n_jobs=-1)
+    return rank_score
 
-rfr.fit(train_x, train_y)
-print(rfr.score(train_x, train_y))
-print(rfr.score(test_x, test_y))
+
+def get_future_pct_chgs(df):
+    """
+    from the 'close_pct_chg' column, this gets the close pct change in the future
+    for a variety of days
+    """
+    for i in list(range(1, 6)) + [10, 15, 20]:
+        df['{}d_future_pct_chg'.format(i)] = df['close_pct_chg'].shift(-i)
+
+    return df
+
+
+def get_autocorrs(df):
+    """
+    gets autocorrelation trends for a variety of periods
+    """
+    for n in [5, 10, 15, 20, 60]:
+        df['{}d_1d_autocorr'.format(n)] = df['Adj_Close'].rolling(n).apply(lambda x: pd.Series(x).autocorr(), raw=True)
+        if n == 5:
+            continue  # need at least n+2 for autocorr rolling
+
+        df['{}d_5d_autocorr'.format(n)] = df['Adj_Close'].rolling(n).apply(lambda x: pd.Series(x).autocorr(5), raw=True)
+        # minimum of n + 2 for autocorr rolling period (somehow)
+        # df['5d_3d_autocorr'] = df['Adj_Close'].rolling(5).apply(lambda x: pd.Series(x).autocorr(3), raw=True)
+        # df['6d_4d_autocorr'] = df['Adj_Close'].rolling(6).apply(lambda x: pd.Series(x).autocorr(4), raw=True)
+    return df
+
+
+if __name__ == "__main__":
+    stocks = dlq.load_stocks()
+    qqq = stocks['QQQ']
+    tqqq = stocks['TQQQ']
+
+    # test if can fit negative trends
+    tqqq_abbrev = tqqq.loc[:'2018-3-23']
+    ann_sl, r2, rs = fit_exponential_curve(tqqq_abbrev, 3, plot_fit=True)
+
+    # c1 = pd.rolling_apply(tqqq['Adj_Close'], 7, lambda x: pd.Series(x).autocorr(1))
+
+    # "trends" will be series of autocorrelations over a certain threshold
+    # 4 days seems to be shortest possible -- 3 days is always +1 or -1
+    c2 = qqq['Adj_Close'].rolling(4).apply(lambda x: pd.Series(x).autocorr(), raw=True)
+    c2.hist()
+    plt.show()
+    c2.plot()
+    plt.show()
+
+
+    c2 = qqq['Adj_Close'].rolling(9).apply(lambda x: pd.Series(x).autocorr(), raw=True)
+    c2.hist()
+    plt.show()
+    c2.plot()
+    plt.show()
+
+    rank_score = get_fits(qqq)
+    # try ML model
+    rank_score.corr()
+
+    # make train/test
+    feat_cols = ['10d_r2', '10d_slope', 'close_pct_chg', '5d_1d_autocorr', '10d_5d_autocorr']
+    targ_cols = ['5d_future_pct_chg', '10d_future_pct_chg', '20d_future_pct_chg']
+    nona = rank_score.dropna()
+    train_idx = int(rank_score.shape[0] * 0.75)
+    train_x = nona.iloc[:train_idx][feat_cols]
+    train_y = nona.iloc[:train_idx][targ_cols]
+    test_x = nona.iloc[train_idx:][feat_cols]
+    test_y = nona.iloc[train_idx:][targ_cols]
+
+    from sklearn.ensemble import RandomForestRegressor
+    rfr = RandomForestRegressor(n_estimators=500, max_depth=5, random_state=42, n_jobs=-1)
+
+    rfr.fit(train_x, train_y)
+    print(rfr.score(train_x, train_y))
+    print(rfr.score(test_x, test_y))

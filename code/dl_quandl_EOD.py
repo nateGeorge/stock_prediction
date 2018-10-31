@@ -533,3 +533,13 @@ def convert_full_df_to_hdf(eod_datapath=DEFAULT_STORAGE + 'EOD_{}.csv', latest_e
                'Adj_Volume']
     full_df = pd.read_csv(eod_datapath, names=headers)
     full_df.to_hdf(eod_datapath_h5, key='data', complib='blosc', complevel=9)
+
+
+def convert_full_df_to_feather(eod_filename=DEFAULT_STORAGE + 'EOD_{}.h5', latest_eod=None):
+    if latest_eod is None:
+        latest_eod = get_latest_eod()
+
+    eod_filename = eod_filename.format(latest_eod)
+    full_df = pd.read_hdf(eod_filename, names=HEADERS)
+    full_df.reset_index(inplace=True)
+    full_df.to_feather(DEFAULT_STORAGE + 'EOD_{}.ft'.format(latest_eod))

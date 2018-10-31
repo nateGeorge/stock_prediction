@@ -448,7 +448,10 @@ def create_tas(bars,
     # matype explanation: https://www.quantopian.com/posts/moving-averages
     if cl:
         bars['ppo_cl'] = talib.PPO(mult_close, fastperiod=12, slowperiod=26, matype=1)
-        bars['ppo_cl_signal'] = talib.EMA(bars['ppo_cl'].bfill().values, timeperiod=9)
+        if bars['ppo_cl'].isnull().all():
+            bars['ppo_cl_signal'] = 0
+        else:
+            bars['ppo_cl_signal'] = talib.EMA(bars['ppo_cl'].bfill().values, timeperiod=9)
 
     if tp:
         bars['ppo_tp'] = talib.PPO(mult_tp, fastperiod=12, slowperiod=26, matype=1)
@@ -509,11 +512,20 @@ def create_tas(bars,
             bars['trix_cl_30_signal'] = talib.EMA(bars['trix_cl_30'].bfill().values, timeperiod=20)
 
         bars['trix_cl_14'] = talib.TRIX(mult_close, timeperiod=14)
-        bars['trix_cl_14_signal'] = talib.EMA(bars['trix_cl_14'].bfill().values, timeperiod=9)
+        if bars['trix_cl_14'].isnull().all():
+            bars['trix_cl_14_signal'] = 0
+        else:
+            bars['trix_cl_14_signal'] = talib.EMA(bars['trix_cl_14'].bfill().values, timeperiod=9)
         bars['trix_cl_12'] = talib.TRIX(mult_close, timeperiod=12)
-        bars['trix_cl_12_signal'] = talib.EMA(bars['trix_cl_12'].bfill().values, timeperiod=9)
+        if bars['trix_cl_12'].isnull().all():
+            bars['trix_cl_12_signal'] = 0
+        else:
+            bars['trix_cl_12_signal'] = talib.EMA(bars['trix_cl_12'].bfill().values, timeperiod=9)
         bars['trix_cl_5'] = talib.TRIX(mult_close, timeperiod=5)
-        bars['trix_cl_5_signal'] = talib.EMA(bars['trix_cl_5'].bfill().values, timeperiod=3)
+        if bars['trix_cl_5'].isnull().all():
+            bars['trix_cl_5_signal'] = 0
+        else:
+            bars['trix_cl_5_signal'] = talib.EMA(bars['trix_cl_5'].bfill().values, timeperiod=3)
 
     if tp:
         bars['trix_tp'] = talib.TRIX(mult_tp, timeperiod=30)
@@ -535,7 +547,10 @@ def create_tas(bars,
     # on balance volume
     if cl:
         bars['obv_cl'] = talib.OBV(mult_close, volume)
-        bars['obv_cl_ema_14'] = talib.EMA(bars['obv_cl'].values, timeperiod=14)
+        if bars['obv_cl'].isnull().all():
+            bars['obv_cl_ema_14'] = 0
+        else:
+            bars['obv_cl_ema_14'] = talib.EMA(bars['obv_cl'].values, timeperiod=14)
     if tp:
         bars['obv_tp'] = talib.OBV(mult_tp, volume)
 

@@ -204,6 +204,7 @@ def load_stocks(stocks=None,
             for s in ret_stocks:
                 r = executor.submit(getattr(cts, TAfunc),
                                     dfs[s],
+                                    verbose=verbose,
                                     return_df=True)
                 jobs.append((s, r))
 

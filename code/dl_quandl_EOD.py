@@ -224,14 +224,20 @@ def get_latest_db_date(storage_path=DEFAULT_STORAGE):
     return None
 
 
-def get_latest_close_date(market='NASDAQ'):
+def get_latest_close_date(market='NASDAQ', last_close=False):
     """
     gets the latest date the markets were open (NASDAQ), and returns the closing datetime
+
+    if last_close is True, gets last datetime that market has closed (not in the future)
     """
     # today = datetime.datetime.now(pytz.timezone('America/New_York')).date()
     today_utc = pd.to_datetime('now').date()
     ndq = mcal.get_calendar(market)
     open_days = ndq.schedule(start_date=today_utc - pd.Timedelta('10 days'), end_date=today_utc)
+    if last_close:
+        past = open_days[open_days['market_close'] <= pd.to_datetime('now')]
+        return past.iloc[-1]['market_close']
+    
     return open_days.iloc[-1]['market_close']
 
 

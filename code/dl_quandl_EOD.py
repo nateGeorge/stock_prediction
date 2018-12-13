@@ -224,14 +224,20 @@ def get_latest_db_date(storage_path=DEFAULT_STORAGE):
     return None
 
 
-def get_latest_close_date(market='NASDAQ', return_time=False):
+def get_latest_close_date(market='NASDAQ', return_time=False, last_close=False):
     """
     gets the latest date the markets were open (NASDAQ), and returns the closing datetime
+
+    if last_close is True, gets last datetime that market has closed (not in the future)
     """
     # today = datetime.datetime.now(pytz.timezone('America/New_York')).date()
     today_utc = pd.to_datetime('now').date()
     ndq = mcal.get_calendar(market)
     open_days = ndq.schedule(start_date=today_utc - pd.Timedelta('10 days'), end_date=today_utc)
+    if last_close:
+        past = open_days[open_days['market_close'] <= pd.to_datetime('now')]
+        return past.iloc[-1]['market_close']
+
     return open_days.iloc[-1]['market_close']
 
 
@@ -533,3 +539,13 @@ def convert_full_df_to_hdf(eod_datapath=DEFAULT_STORAGE + 'EOD_{}.csv', latest_e
                'Adj_Volume']
     full_df = pd.read_csv(eod_datapath, names=headers)
     full_df.to_hdf(eod_datapath_h5, key='data', complib='blosc', complevel=9)
+
+
+def convert_full_df_to_feather(eod_filename=DEFAULT_STORAGE + 'EOD_{}.h5', latest_eod=None):
+    if latest_eod is None:
+        latest_eod = get_latest_eod()
+
+    eod_filename = eod_filename.format(latest_eod)
+    full_df = pd.read_hdf(eod_filename, names=HEADERS)
+    full_df.reset_index(inplace=True)
+    full_df.to_feather(DEFAULT_STORAGE + 'EOD_{}.ft'.format(latest_eod))

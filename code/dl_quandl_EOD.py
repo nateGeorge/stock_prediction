@@ -224,7 +224,7 @@ def get_latest_db_date(storage_path=DEFAULT_STORAGE):
     return None
 
 
-def get_latest_close_date(market='NASDAQ'):
+def get_latest_close_date(market='NASDAQ', return_time=False):
     """
     gets the latest date the markets were open (NASDAQ), and returns the closing datetime
     """

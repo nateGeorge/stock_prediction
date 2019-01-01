@@ -235,7 +235,7 @@ def get_latest_close_date(market='NASDAQ', return_time=False, last_close=False):
     ndq = mcal.get_calendar(market)
     open_days = ndq.schedule(start_date=today_utc - pd.Timedelta('10 days'), end_date=today_utc)
     if last_close:
-        past = open_days[open_days['market_close'] <= pd.to_datetime('now')]
+        past = open_days[open_days['market_close'] <= pd.to_datetime('now').tz_localize('UTC')]
         return past.iloc[-1]['market_close']
 
     return open_days.iloc[-1]['market_close']

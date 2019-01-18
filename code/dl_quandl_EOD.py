@@ -402,7 +402,7 @@ def load_one_stock_fulldf(full_df, s, make_files, filename):
     # df.loc[:, 'Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d')
     # df.set_index('Date', inplace=True)
     if make_files:
-        df.to_hdf(filename, key='data', comlib='blosc', complevel=9)
+        df.to_hdf(filename, key='data', complib='blosc', complevel=9)
 
     return df
 

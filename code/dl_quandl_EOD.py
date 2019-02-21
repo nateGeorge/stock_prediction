@@ -83,11 +83,15 @@ def download_all_stocks_fast_csv(write_csv=False):
 def download_entire_db(storage_path=DEFAULT_STORAGE,
                         remove_previous=True,
                         return_df=False,
-                        return_latest_date=False):
+                        return_latest_date=False,
+                        write=['feather']):
     """
     downloads entire database and saves to .h5, replacing old file
     :param storage_path: string, temporary location where to save the full csv file
     :param remove_previous: removes previous instance of the EOD dataset
+    :param write: list of filetypes to write, can include 'feather' and 'hdf5'
+                hdf5 can be compressed for about 1GB filesize saving, but feather is
+                much faster and can be loaded in R as well
     """
     # first check if we have the latest data
     if not os.path.exists(storage_path):
@@ -119,15 +123,17 @@ def download_entire_db(storage_path=DEFAULT_STORAGE,
                     infer_datetime_format=True)
     latest_date = df.index.max().date().strftime('%Y%m%d')
 
-    df.to_hdf(storage_path + 'EOD_' + latest_date + '.h5',
-                key='data',
-                complib='blosc',
-                complevel=9)
+    if 'hdf5' in write:
+        df.to_hdf(storage_path + 'EOD_' + latest_date + '.h5',
+                    key='data',
+                    complib='blosc',
+                    complevel=9)
 
     # also write feather file so can read into R
     # have to reset the index because feather can't handle non-default index (maybe non-unique?)
     df.reset_index(inplace=True)
-    df.to_feather(storage_path + 'EOD_' + latest_date + '.ft')
+    if 'feather' in write:
+        df.to_feather(storage_path + 'EOD_' + latest_date + '.ft')
 
     if remove_previous:
         for ext in ['h5', 'ft']:
@@ -456,7 +462,8 @@ def load_stocks(make_files=False,
                 latest_eod=None,
                 verbose=False,
                 earliest_date=None,
-                only_current_stocks=True):
+                only_current_stocks=True,
+                filetype='feather'):
     """
     :param datapath: string; path to stock datafiles
     :param make_files: bool, will save individual stock file if true (loading full dataset is quite slow)
@@ -464,6 +471,7 @@ def load_stocks(make_files=False,
     :param latest_eod: string, yyyymmdd; latest day eod data was collected
 
     :param only_current_stocks: boolean, if true, only returns stocks that are currently being traded
+    :param filetype: either 'feather' or 'hdf5'
 
     :returns: dictionary of dataframes with tickers as keys
     """
@@ -479,7 +487,15 @@ def load_stocks(make_files=False,
 
     dfs = {}
     # load big df with everything, and load all stocks
-    full_df = pd.read_hdf(eod_datapath, names=HEADERS)
+    if filetype == 'hdf5':
+        full_df = pd.read_hdf(eod_datapath, names=HEADERS)
+    elif filetype == 'feather':
+        eod_ft_filename = eod_datapath.replace('h5', 'ft')
+        full_df = pd.read_feather(eod_ft_filename)
+    else:
+        print("filetype should be one of ['feather', 'hdf5']")
+        return
+
     if only_current_stocks:
         latest_date = full_df.index.max()
     tickers = set(full_df['Ticker'])

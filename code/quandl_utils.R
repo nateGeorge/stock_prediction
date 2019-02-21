@@ -31,6 +31,11 @@ if (is.null(latest.eod)) {
 
 load.pandas.df <- function() {
   # load with pandas -- currently not working properly
+  # tried loading hdf, but couldn't read blosc-compression
+  # https://www.kaggle.com/jeffmoser/read-hdf-function-for-r
+  # https://www.r-bloggers.com/load-a-pythonpandas-data-frame-from-an-hdf5-file-into-r/
+  # https://github.com/hhoeflin/hdf5r
+  
   library(reticulate)
   # doesn't seem to be necessary, but just in case you need it...
   # https://rstudio.github.io/reticulate/articles/versions.html
@@ -48,8 +53,3 @@ load.latest.feather <- function(){
   df <- read_feather(paste0(DEFAULT.STORAGE, 'EOD_', latest.eod, '.ft'))
   return(df)
 }
-
-# tried loading hdf, but couldn't read blosc-compression
-# https://www.kaggle.com/jeffmoser/read-hdf-function-for-r
-# https://www.r-bloggers.com/load-a-pythonpandas-data-frame-from-an-hdf5-file-into-r/
-# https://github.com/hhoeflin/hdf5r

@@ -2,11 +2,12 @@
 import io
 import os
 import re
+import gc
 import time
+import pytz
+import glob
 import zipfile
 import datetime
-import glob
-import gc
 
 # installed
 import quandl
@@ -16,7 +17,6 @@ from requests.adapters import HTTPAdapter
 from pytz import timezone
 from concurrent.futures import ProcessPoolExecutor
 import pandas_market_calendars as mcal
-import pytz
 
 # custom
 from file_utils import get_home_dir
@@ -81,13 +81,13 @@ def download_all_stocks_fast_csv(write_csv=False):
 
 
 def download_entire_db(storage_path=DEFAULT_STORAGE,
-                        remove_last=True,
+                        remove_previous=True,
                         return_df=False,
                         return_latest_date=False):
     """
     downloads entire database and saves to .h5, replacing old file
     :param storage_path: string, temporary location where to save the full csv file
-    :param remove_last: removes last instance of the EOD dataset
+    :param remove_previous: removes previous instance of the EOD dataset
     """
     # first check if we have the latest data
     if not os.path.exists(storage_path):
@@ -118,25 +118,36 @@ def download_entire_db(storage_path=DEFAULT_STORAGE,
                     parse_dates=True,
                     infer_datetime_format=True)
     latest_date = df.index.max().date().strftime('%Y%m%d')
+
     df.to_hdf(storage_path + 'EOD_' + latest_date + '.h5',
                 key='data',
                 complib='blosc',
                 complevel=9)
-    if remove_last:
-        files = glob.glob(storage_path + 'EOD_*.h5')
-        files = [f for f in files if len(f.split('/')[-1]) == 15]  # don't want any of the small files, only full DBs
-        print(sorted(files, key=os.path.getctime))
-        if len(files) != 1:
-            latest_file = sorted(files, key=os.path.getctime)[-2]
-            print('removing', latest_file)
-            os.remove(latest_file)
 
+    # also write feather file so can read into R
+    # have to reset the index because feather can't handle non-default index (maybe non-unique?)
+    df.reset_index(inplace=True)
+    df.to_feather(storage_path + 'EOD_' + latest_date + '.ft')
+
+    if remove_previous:
+        for ext in ['h5', 'ft']:
+            files = glob.glob(storage_path + 'EOD_*.' + ext)
+            files = [f for f in files if len(f.split('/')[-1]) == 15]  # don't want any of the small files, only full DBs
+            print(sorted(files, key=os.path.getctime))
+            if len(files) != 1:
+                previous_file = sorted(files, key=os.path.getctime)[-2]
+                print('removing', previous_file)
+                os.remove(previous_file)
+
+    # delete downloaded zip file
     os.remove(storage_path + z.filelist[0].filename)
 
     if return_df:
+        # set index back to normal for return_df
+        df.set_index('Date', inplace=True)
         return df
     elif return_latest_date:
-        return pd.to_datetime(df.index.max().date())
+        return pd.to_datetime(df['Date'].max().date())
 
 
 def check_market_status():
@@ -144,11 +155,10 @@ def check_market_status():
     Checks to see if market is open today.
     Uses the pandas_market_calendars package as mcal
     """
-    # today = datetime.datetime.now(pytz.timezone('America/New_York')).date()
-    today_utc = pd.to_datetime('now').date()
+    today_ny = datetime.datetime.now(pytz.timezone('America/New_York'))
     ndq = mcal.get_calendar('NASDAQ')
-    open_days = ndq.schedule(start_date=today_utc - pd.Timedelta('10 days'), end_date=today_utc)
-    if today_utc in open_days.index:
+    open_days = ndq.schedule(start_date=today_ny - pd.Timedelta('10 days'), end_date=today_ny)
+    if today_ny.date() in open_days.index:
         return open_days
     else:
         return None
@@ -175,7 +185,7 @@ def daily_download_entire_db(storage_path=DEFAULT_STORAGE):
 
         if latest_db_date.date() != latest_close_date.date():
             if (latest_close_date.date() - latest_db_date.date()) >= pd.Timedelta('1D'):
-                if today_utc.hour > latest_close_date.hour:
+                if today_ny.hour > latest_close_date.hour:
                     print('db more than 1 day out of date, downloading...')
                     latest_db_date = download_entire_db(return_latest_date=True)
             elif pd_today_ny.date() == latest_close_date.date():  # if the market is open and the db isn't up to date with today...
@@ -231,9 +241,10 @@ def get_latest_close_date(market='NASDAQ', return_time=False, last_close=False):
     if last_close is True, gets last datetime that market has closed (not in the future)
     """
     # today = datetime.datetime.now(pytz.timezone('America/New_York')).date()
-    today_utc = pd.to_datetime('now').date()
+    # today_utc = pd.to_datetime('now').date()
+    today_ny = datetime.datetime.now(pytz.timezone('America/New_York'))
     ndq = mcal.get_calendar(market)
-    open_days = ndq.schedule(start_date=today_utc - pd.Timedelta('10 days'), end_date=today_utc)
+    open_days = ndq.schedule(start_date=today_ny - pd.Timedelta('10 days'), end_date=today_ny)
     if last_close:
         past = open_days[open_days['market_close'] <= pd.to_datetime('now').tz_localize('UTC')]
         return past.iloc[-1]['market_close']

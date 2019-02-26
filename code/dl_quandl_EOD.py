@@ -424,8 +424,23 @@ def load_one_stock_fulldf(full_df, s, make_files, filename):
     return df
 
 
-def get_latest_eod(storage_path=DEFAULT_STORAGE, return_file=False):
-    files = glob.glob(storage_path + '*.h5')
+def get_latest_eod(storage_path=DEFAULT_STORAGE, return_file=False, filetype='feather'):
+    """
+    gets date of latest EOD file
+
+    args:
+    storage_path: string; should be path to directory with file(s)
+    return_file: boolean; if true, will return filename, otherwise if false, returns latest date as string
+    filetype: one of ['feather', 'hdf5']; determines type of file to look for
+    """
+    if filetype == 'feather':
+        files = glob.glob(storage_path + '*.ft')
+    elif filetype == 'hdf5':
+        files = glob.glob(storage_path + '*.h5')
+    else:
+        print("filetype argument must be one of ['feather', 'hdf5']")
+        return None
+
     latest_file = sorted(files, key=os.path.getctime)[-1]
     latest_eod = latest_file[-11:-3]
     if return_file:
@@ -492,6 +507,7 @@ def load_stocks(make_files=False,
     elif filetype == 'feather':
         eod_ft_filename = eod_datapath.replace('h5', 'ft')
         full_df = pd.read_feather(eod_ft_filename)
+        full_df.set_index('Date', inplace=True)
     else:
         print("filetype should be one of ['feather', 'hdf5']")
         return

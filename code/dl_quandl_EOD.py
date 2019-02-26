@@ -226,11 +226,18 @@ def daily_download_entire_db(storage_path=DEFAULT_STORAGE):
         #     time.sleep(3600)
 
 
-def get_latest_db_date(storage_path=DEFAULT_STORAGE):
+def get_latest_db_date(storage_path=DEFAULT_STORAGE, filetype='feather'):
     """
     gets the date of the last full scrape of the db
     """
-    files = glob.glob(storage_path + 'EOD_*.h5')
+    if filetype == 'feather':
+        files = glob.glob(storage_path + 'EOD_*.ft')
+    elif filetype == 'hdf5':
+        files = glob.glob(storage_path + 'EOD_*.h5')
+    else:
+        print("filetype must be one of ['feather', 'hdf5']")
+        return None
+
     if len(files) > 0:
         files = [f for f in files if len(f.split('/')[-1]) == 15]  # don't want any of the small files, only full DBs
         latest_file = sorted(files, key=os.path.getctime)[-1]

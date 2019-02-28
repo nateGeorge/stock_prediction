@@ -140,7 +140,7 @@ def download_entire_db(storage_path=DEFAULT_STORAGE,
             files = glob.glob(storage_path + 'EOD_*.' + ext)
             files = [f for f in files if len(f.split('/')[-1]) == 15]  # don't want any of the small files, only full DBs
             print(sorted(files, key=os.path.getctime))
-            if len(files) != 1:
+            if len(files) > 1:
                 previous_file = sorted(files, key=os.path.getctime)[-2]
                 print('removing', previous_file)
                 os.remove(previous_file)

@@ -7,8 +7,12 @@ create.reticulate.env <- function(){
   conda_install("r-reticulate", packages='pandas')
 }
 
-get.latest.eod <- function(){
-  files <- list.files(DEFAULT.STORAGE, '*.h5')
+get.latest.eod <- function(format='feather'){
+  if(format == 'hdf5') {
+    files <- list.files(DEFAULT.STORAGE, '*.h5')
+  } else if(format == 'feather') {
+    files <- list.files(DEFAULT.STORAGE, '*.ft')
+  }
   info <- file.info(paste(DEFAULT.STORAGE, files, sep=''))
   latest.f <- rownames(info[order(info$mtime, decreasing=TRUE), ])[1]
   chunks <- strsplit(latest.f, '_')[[1]]
@@ -49,7 +53,8 @@ load.pandas.df <- function() {
 load.latest.feather <- function(){
   # can load with feather, but then have to create ft file from pandas
   library(feather)
+  library(data.table)
   latest.eod <- get.latest.eod()
-  df <- read_feather(paste0(DEFAULT.STORAGE, 'EOD_', latest.eod, '.ft'))
-  return(df)
+  dt <- as.data.table(read_feather(paste0(DEFAULT.STORAGE, 'EOD_', latest.eod, '.ft')))
+  return(dt)
 }

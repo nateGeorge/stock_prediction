@@ -46,7 +46,19 @@ coef(garchfit)
 # check which coefs are statistically significant
 # suggests rule-of-thumb of t-stat greater than 2 (probably around same as p-val > 0.05)
 garchfit@fit$matcoef
+# archm, alpha1, and omega all look insignificant.  archm is the in-mean model
+# alpha1 is part of the garch model (the garch term which is the multiplier for 1-day previous error terms)
+# omega is the constant from the garch model
+# getting rid of the in-mean model, not sure how to get rid of alpha
 
+garchspec2 <- ugarchspec(mean.model = list(armaOrder = c(1, 1)),
+                        variance.model = list(model = "gjrGARCH",
+                                              variance.targeting = T),
+                        distribution.model = "sstd")
+
+garchfit2 <- ugarchfit(data = spy.ret, spec = garchspec2)
+
+garchfit2@fit$matcoef
 
 # higher is better
 likelihood(garchfit)
@@ -55,3 +67,18 @@ likelihood(garchfit)
 
 # lower is better
 infocriteria(garchfit)
+
+# look at using fGARCH model, which is latest and combines many things like asymmetric news curve and exponentials, and Taylor's obs
+# for dists, look at 3.4 Skewed Distributions by Inverse Scale Fac and  Generalized Hyperbolic Skew Student Distribution
+# sged, 
+
+
+garchspec3 <- ugarchspec(mean.model = list(armaOrder = c(1, 1)),
+                         variance.model = list(model = "fGARCH", submodel = 'ALLGARCH',
+                                               variance.targeting = T),
+                         distribution.model = "sstd")
+
+garchfit3 <- ugarchfit(data = spy.ret, spec = garchspec2)
+
+garchfit3@fit$matcoef
+

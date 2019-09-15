@@ -513,7 +513,12 @@ def load_stocks(make_files=False,
         full_df = pd.read_hdf(eod_datapath, names=HEADERS)
     elif filetype == 'feather':
         eod_ft_filename = eod_datapath.replace('h5', 'ft')
-        full_df = pd.read_feather(eod_ft_filename)
+        try:
+            full_df = pd.read_feather(eod_ft_filename)
+        except TypeError:
+            import feather
+            full_df = feather.read_dataframe(eod_ft_filename)
+            
         full_df.set_index('Date', inplace=True)
     else:
         print("filetype should be one of ['feather', 'hdf5']")
